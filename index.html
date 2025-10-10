@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Checklist Digital – 3D (Hotspots via PRESET_PARTS)</title>
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- PDF helpers -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <!-- Google model-viewer -->
+  <script type="module" src="https://unpkg.com/@google/model-viewer@^3.3.0/dist/model-viewer.min.js"></script>
+
+  <!-- Fonte -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* ---------- Base ---------- */
+    body{ font-family:'Inter',sans-serif; }
+    dialog::backdrop{ background: rgba(15, 23, 42, .55); backdrop-filter: blur(2px); }
+
+    /* ---------- Model-viewer moldura glow ---------- */
+    model-viewer{
+      width:100%; height:460px; background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);
+      border-radius:1.25rem; outline:1px dashed rgba(148,163,184,.35);
+      box-shadow: inset 0 0 0 1px rgba(148,163,184,.25), 0 6px 30px rgba(2,6,23,.08);
+      position:relative;
+    }
+    model-viewer::after{
+      content:""; position:absolute; inset:0; border-radius:1.25rem; pointer-events:none;
+      box-shadow: 0 0 0 1px rgba(59,130,246,.12), 0 0 40px rgba(59,130,246,.08) inset;
+    }
+
+    /* ---------- Hotspots ---------- */
+    .mv-pin{
+      width:22px; height:22px; border-radius:9999px; background:#2563eb; color:#fff;
+      border:2px solid #fff; display:grid; place-items:center; font-size:12px; font-weight:700;
+      box-shadow:0 6px 18px rgba(37,99,235,.35); pointer-events:auto; cursor:pointer; position:relative;
+      transition: transform .12s ease, box-shadow .2s ease;
+    }
+    .mv-pin:hover{ transform: translateY(-1px) scale(1.04); box-shadow:0 10px 24px rgba(37,99,235,.45); }
+    .mv-pin::after{
+      content:""; position:absolute; bottom:-6px; left:50%; transform:translateX(-50%);
+      width:2px; height:6px; background:#2563eb; border-radius:1px;
+    }
+    .tooltip{
+      position:absolute; top:-34px; left:50%; transform:translateX(-50%);
+      background:#0f172a; color:#e5e7eb; font-size:10px; padding:4px 8px; border-radius:6px;
+      white-space:nowrap; pointer-events:none; opacity:0; translate:0 2px; transition:.15s;
+      box-shadow:0 4px 16px rgba(2,6,23,.35);
+    }
+    .mv-pin:hover .tooltip{ opacity:1; translate:0 0; }
+
+    /* ---------- Badges ---------- */
+    .badge{ font-size:.75rem; padding:.25rem .5rem; border-radius:.5rem; border:1px solid rgba(148,163,184,.35); backdrop-filter: blur(6px); }
+    .badge-ok{ background:rgba(16,185,129,.08); color:#065f46; border-color:rgba(16,185,129,.25); }
+    .badge-warn{ background:rgba(251,191,36,.08); color:#92400e; border-color:rgba(251,191,36,.25); }
+    .badge-err{ background:rgba(239,68,68,.08); color:#7f1d1d; border-color:rgba(239,68,68,.25); }
+
+    /* ---------- Inputs com floating label ---------- */
+    .fl-group{ position:relative; }
+    .fl-input{
+      width:100%; border-radius:0.875rem; border:1px solid rgba(148,163,184,.45);
+      background:linear-gradient(180deg,rgba(255,255,255,.9),rgba(248,250,252,.9));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.6);
+      padding:1.05rem .95rem .85rem .95rem; outline:0; transition: box-shadow .2s, border-color .2s, background .2s;
+    }
+    .fl-input:focus{ border-color:rgba(59,130,246,.75); box-shadow:0 0 0 4px rgba(59,130,246,.15); background:#fff; }
+    .fl-label{
+      position:absolute; left:.95rem; top:.95rem; font-size:.875rem; color:#6b7280; pointer-events:none;
+      transition: all .15s ease;
+      background:linear-gradient(#fff,#fff) padding-box;
+      padding:0 .35rem; border-radius:.375rem;
+    }
+    .fl-input:focus + .fl-label,
+    .fl-input:not(:placeholder-shown) + .fl-label{
+      top:-.55rem; font-size:.7rem; color:#2563eb; box-shadow:0 0 0 6px #fff;
+    }
+
+    /* ---------- Select estilizado ---------- */
+    .nice-select{
+      appearance:none; background:linear-gradient(180deg,#fff,#f8fafc);
+      border:1px solid rgba(148,163,184,.45); padding:.65rem .95rem; border-radius:.75rem;
+      outline:0; transition: box-shadow .2s, border-color .2s; width:100%;
+    }
+    .nice-select:focus{ border-color:rgba(59,130,246,.75); box-shadow:0 0 0 4px rgba(59,130,246,.15); }
+    .select-wrap{ position:relative; }
+    .select-wrap svg{ position:absolute; right:.6rem; top:50%; transform:translateY(-50%); pointer-events:none; opacity:.7; }
+
+    /* ---------- Range Combustível ---------- */
+    input[type="range"]{
+      -webkit-appearance:none; appearance:none; height:6px; background:linear-gradient(90deg,#ef4444,#22c55e);
+      border-radius:999px; outline:none;
+    }
+    input[type="range"]::-webkit-slider-thumb{
+      -webkit-appearance:none; width:18px; height:18px; border-radius:999px; background:#fff; border:2px solid #2563eb;
+      box-shadow:0 6px 18px rgba(37,99,235,.25);
+    }
+    input[type="range"]::-moz-range-thumb{
+      width:18px; height:18px; border-radius:999px; background:#fff; border:2px solid #2563eb;
+      box-shadow:0 6px 18px rgba(37,99,235,.25);
+    }
+  </style>
+</head>
+
+<body class="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
+  <div class="max-w-5xl mx-auto p-4 sm:p-6 lg:p-10">
+    <!-- Card principal -->
+    <div class="rounded-3xl border border-slate-200/70 bg-white/80 backdrop-blur-xl shadow-[0_10px_40px_rgba(2,6,23,.06)] ring-1 ring-white/60 overflow-hidden">
+
+      <!-- ---------- Cabeçalho ---------- -->
+      <header class="p-6 sm:p-8 bg-gradient-to-r from-slate-50 to-white border-b border-slate-200/60">
+        <div class="flex items-center justify-center gap-4 mb-4">
+          <img src="https://i.imgur.com/ijnRbkK.png" alt="Logo" class="h-14 w-auto opacity-90">
+          <div>
+            <h1 class="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight">Checklist de Entrada de Veículo – 3D</h1>
+            <p class="text-slate-500">Clique nos pinos azuis para registrar avarias.</p>
+          </div>
+        </div>
+      </header>
+
+      <div class="p-6 sm:p-8 space-y-10">
+
+        <!-- ---------- Dados OS / Cliente / Veículo ---------- -->
+        <section class="grid grid-cols-1 gap-8">
+          <!-- OS -->
+          <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
+            <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
+              <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-blue-50 text-blue-600 text-xs">OS</span>
+              Dados da Ordem de Serviço
+            </h2>
+            <div class="max-w-xl">
+              <div class="fl-group">
+                <input class="fl-input" placeholder=" " type="text" id="os_interna">
+                <label class="fl-label" for="os_interna">O.S Interna</label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cliente & Veículo -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- Cliente -->
+            <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
+              <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
+                <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 text-xs">👤</span>
+                Dados do Cliente
+              </h2>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="fl-group col-span-2">
+                  <input class="fl-input" placeholder=" " type="text" id="cli_nome">
+                  <label class="fl-label" for="cli_nome">Nome do Cliente</label>
+                </div>
+                <div class="fl-group">
+                  <input class="fl-input" placeholder=" " type="text" id="cli_doc">
+                  <label class="fl-label" for="cli_doc">CPF/CNPJ</label>
+                </div>
+                <div class="fl-group">
+                  <input class="fl-input" placeholder=" " type="tel" id="cli_tel">
+                  <label class="fl-label" for="cli_tel">Telefone</label>
+                </div>
+                <div class="fl-group col-span-2">
+                  <input class="fl-input" placeholder=" " type="text" id="cli_end">
+                  <label class="fl-label" for="cli_end">Endereço</label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Veículo -->
+            <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
+              <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
+                <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-violet-50 text-violet-600 text-xs">🚗</span>
+                Dados do Veículo
+              </h2>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="fl-group">
+                  <input class="fl-input" placeholder=" " type="text" id="veic_nome">
+                  <label class="fl-label" for="veic_nome">Veículo</label>
+                </div>
+                <div class="fl-group">
+                  <input class="fl-input" placeholder=" " type="text" id="veic_placa">
+                  <label class="fl-label" for="veic_placa">Placa</label>
+                </div>
+                <div class="fl-group">
+                  <input class="fl-input" placeholder=" " type="text" id="veic_cor">
+                  <label class="fl-label" for="veic_cor">Cor</label>
+                </div>
+                <div class="fl-group">
+                  <input class="fl-input" placeholder=" " type="number" id="veic_km">
+                  <label class="fl-label" for="veic_km">KM</label>
+                </div>
+                <div class="fl-group col-span-2">
+                  <input class="fl-input" placeholder=" " type="datetime-local" id="entry_datetime">
+                  <label class="fl-label" for="entry_datetime">Data & Hora de Entrada</label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ---------- 3D ---------- -->
+        <section class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2">
+              <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-sky-50 text-sky-600 text-xs">3D</span>
+              Inspeção 3D
+            </h2>
+            <span id="model-status" class="badge badge-warn">Carregando…</span>
+          </div>
+          <p class="text-sm text-slate-500 mb-3">Clique nos pinos azuis posicionados no veículo para registrar a avaria.</p>
+
+          <model-viewer id="car3d"
+            src="models/carro.glb"
+            camera-controls
+            interaction-prompt="auto"
+            exposure="0.9"
+            shadow-intensity="1"
+            environment-image="neutral"
+            ar
+            ar-modes="webxr scene-viewer quick-look">
+            <!-- Hotspots via JS -->
+          </model-viewer>
+
+          <div id="damages-list" class="mt-4 space-y-2"></div>
+        </section>
+
+        <!-- ---------- Nível de Combustível ---------- -->
+        <section class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
+          <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
+            <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-amber-50 text-amber-600 text-xs">⛽</span>
+            Nível de Combustível
+          </h2>
+          <div class="flex items-center justify-center gap-4">
+            <span class="font-mono font-bold text-rose-500">E</span>
+            <input type="range" min="0" max="100" value="50" class="w-full max-w-lg">
+            <span class="font-mono font-bold text-emerald-600">F</span>
+          </div>
+        </section>
+
+        <!-- ---------- Checklist ---------- -->
+        <section class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
+          <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
+            <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-slate-50 text-slate-600 text-xs">☑️</span>
+            Checklist de Itens
+          </h2>
+          <div id="items-checklist" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+        </section>
+
+        <!-- ---------- Observações / Assinaturas ---------- -->
+        <section class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
+          <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
+            <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-pink-50 text-pink-600 text-xs">📝</span>
+            Observações e Assinaturas
+          </h2>
+
+          <div class="fl-group mb-6">
+            <textarea id="obs" class="fl-input min-h-[110px]" placeholder=" "></textarea>
+            <label class="fl-label" for="obs">Demais observações</label>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div>
+              <label class="block mb-2 font-medium text-slate-700">Assinatura do Cliente</label>
+              <div class="rounded-xl border border-slate-200 bg-white/60 p-3">
+                <canvas id="customer-signature" class="w-full h-40 bg-slate-50 rounded-md cursor-crosshair"></canvas>
+              </div>
+              <button onclick="clearSignature('customer-signature')" class="mt-2 text-sm text-slate-600 hover:text-rose-600 transition">Limpar</button>
+            </div>
+            <div>
+              <label class="block mb-2 font-medium text-slate-700">Assinatura do Responsável</label>
+              <div class="rounded-xl border border-slate-200 bg-white/60 p-3">
+                <canvas id="inspector-signature" class="w-full h-40 bg-slate-50 rounded-md cursor-crosshair"></canvas>
+              </div>
+              <button onclick="clearSignature('inspector-signature')" class="mt-2 text-sm text-slate-600 hover:text-rose-600 transition">Limpar</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ---------- Ações ---------- -->
+        <section class="sticky bottom-4 z-10">
+          <div class="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur p-3 sm:p-4 shadow-lg flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
+            <button id="generate-pdf" class="inline-flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-blue-700 active:scale-[.99] shadow-[0_12px_24px_rgba(37,99,235,.25)] transition w-full sm:w-auto">
+              Salvar e Gerar PDF
+            </button>
+            <button onclick="window.location.reload()" class="inline-flex items-center justify-center gap-2 bg-white text-slate-800 font-semibold py-3 px-6 rounded-xl border border-slate-200 hover:bg-slate-50 active:scale-[.99] transition w-full sm:w-auto">
+              Limpar Formulário
+            </button>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ---------- Modal de Avaria ---------- -->
+  <dialog id="damage-modal" class="p-0 rounded-2xl overflow-hidden border border-slate-200 w-full max-w-md">
+    <div class="bg-gradient-to-br from-white to-slate-50 p-5 border-b border-slate-200">
+      <h3 id="modal-title" class="text-lg font-bold text-slate-800">Adicionar Avaria</h3>
+    </div>
+
+    <form id="damage-form" class="p-5 space-y-4">
+      <input type="hidden" id="damage-3d-pos">
+      <input type="hidden" id="damage-3d-norm">
+
+      <div>
+        <p class="text-sm font-medium text-slate-700 mb-2">Tipo de Avaria</p>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white/70 px-3 py-2">
+            <input type="radio" name="damage-type" value="Amassado"> <span>Amassado</span>
+          </label>
+          <label class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white/70 px-3 py-2">
+            <input type="radio" name="damage-type" value="Riscado"> <span>Riscado</span>
+          </label>
+          <label class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white/70 px-3 py-2">
+            <input type="radio" name="damage-type" value="Quebrado"> <span>Quebrado</span>
+          </label>
+          <label class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white/70 px-3 py-2">
+            <input type="radio" name="damage-type" value="Faltante"> <span>Faltante</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="fl-group">
+        <input id="damage-part" type="text" class="fl-input" placeholder=" ">
+        <label class="fl-label" for="damage-part">Peça avariada</label>
+      </div>
+
+      <div class="fl-group">
+        <textarea id="damage-notes" rows="2" class="fl-input min-h-[84px]" placeholder=" "></textarea>
+        <label class="fl-label" for="damage-notes">Observações</label>
+      </div>
+
+      <div>
+        <label for="damage-photo" class="block text-sm font-medium text-slate-700 mb-2">Foto</label>
+        <div class="flex items-center gap-3">
+          <input type="file" id="damage-photo" accept="image/*" class="file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 nice-select w-full">
+        </div>
+        <img id="photo-preview" class="hidden mt-3 rounded-xl max-h-40 w-auto border border-slate-200 shadow-sm"/>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 pt-2 border-t border-slate-200">
+        <button type="button" id="cancel-damage" class="inline-flex items-center justify-center px-4 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50">Cancelar</button>
+        <button type="submit" class="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    "use strict";
+
+    /* ========================
+       HOTSPOTS — EDITE AQUI
+       ======================== */
+    const PRESET_PARTS = [
+      { id:'capo',            label:'Capô',                   pos:{ x: 1.70, y: 1.00, z: 0.00 },  norm:{ x: 0.00, y: 1.00, z: 0.00 } },
+      { id:'porta-malas',     label:'Porta-malas',            pos:{ x:-2.05, y: 1.20, z: 0.00 },  norm:{ x: 0.00, y: 1.00, z: 0.00 } },
+      { id:'porta-tras-dir',  label:'Porta Traseira Dir.',    pos:{ x:-0.60, y: 0.65, z: 1.00 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } },
+      { id:'porta-diant-dir', label:'Porta Dianteira Dir.',   pos:{ x: 0.30, y: 0.65, z: 1.00 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } },
+      { id:'porta-diant-esq', label:'Porta Dianteira Esq.',   pos:{ x: 0.30, y: 0.65, z:-1.00 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } },
+      { id:'porta-tras-esq',  label:'Porta Traseira Esq.',    pos:{ x:-0.60, y: 0.65, z:-1.00 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } },
+      { id:'janela-tras-esq', label:'Janela Traseira Esq.',   pos:{ x:-0.60, y: 1.25, z:-0.90 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } },
+      { id:'janela-diant-esq',label:'Janela Dianteira Esq.',  pos:{ x: 0.15, y: 1.25, z:-0.90 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } },
+      { id:'janela-tras-dir', label:'Janela Traseira Dir.',   pos:{ x:-0.60, y: 1.25, z: 0.90 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } },
+      { id:'janela-diant-dir',label:'Janela Dianteira Dir.',  pos:{ x: 0.15, y: 1.25, z: 0.90 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } },
+      { id:'pneu-diant-dir',  label:'Pneu Dianteiro Dir.',    pos:{ x: 1.50, y: 0.50, z: 0.90 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } },
+      { id:'pneu-tras-dir',   label:'Pneu Traseiro Dir.',     pos:{ x:-1.50, y: 0.50, z: 0.90 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } },
+      { id:'pneu-diant-esq',  label:'Pneu Dianteiro Esq.',    pos:{ x: 1.50, y: 0.50, z:-0.90 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } },
+      { id:'pneu-tras-esq',   label:'Pneu Traseiro Esq.',     pos:{ x:-1.50, y: 0.50, z:-0.90 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } },
+      { id:'farol-diant-dir', label:'Farol Dianteiro Dir.',   pos:{ x: 2.00, y: 0.50, z: 0.60 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } },
+      { id:'farol-diant-esq', label:'Farol Dianteiro Esq.',   pos:{ x: 2.00, y: 0.50, z:-0.60 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } },
+      { id:'farol-tras-dir',  label:'Farol Traseiro Dir.',    pos:{ x:-2.30, y: 0.70, z: 0.60 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } },
+      { id:'farol-tras-esq',  label:'Farol Traseiro Esq.',    pos:{ x:-2.30, y: 0.70, z:-0.60 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } }
+    ];
+
+    (function main(){
+      const { jsPDF } = window.jspdf;
+      const $ = (s,r=document)=>r.querySelector(s); const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
+
+      /* ---------- Cache ---------- */
+      const mv = $('#car3d'), modelStatus = $('#model-status'), listContainer = $('#damages-list');
+      const damageModal = $('#damage-modal'), damageForm = $('#damage-form');
+      const inputPos = $('#damage-3d-pos'), inputNorm = $('#damage-3d-norm'), inputPart = $('#damage-part'), inputNotes = $('#damage-notes');
+      const photoInput = $('#damage-photo'), photoPreview = $('#photo-preview');
+      const cancelBtn = $('#cancel-damage'), generateBtn = $('#generate-pdf');
+
+      /* ---------- Estado ---------- */
+      /** @type {{pos3d:{x:number,y:number,z:number}, norm3d:{x:number,y:number,z:number}, type:string, part:string, notes:string, photo?:string, timestamp:number}[]} */
+      let damages = []; let editingIndex = null;
+
+      /* ---------- Utils ---------- */
+      const normalizeOrUp = (v)=>{ const L=Math.hypot(v?.x||0,v?.y||0,v?.z||0); return L?{x:v.x/L,y:v.y/L,z:v.z/L}:{x:0,y:1,z:0}; };
+      const setStatus = (k,t)=>{ modelStatus.className='badge '+(k==='ok'?'badge-ok':k==='err'?'badge-err':'badge-warn'); modelStatus.textContent=t; };
+
+      /* ---------- Inicializações ---------- */
+      $('#entry_datetime').value = new Date().toISOString().slice(0,16);
+
+      (function buildChecklist(){
+        const items = ['Extintor de Incêndio','Tapetes','Rádio/CD/DVD','Alarme','Acendedor de Cigarro','Para-brisa','Palhetas Dianteiras','Faróis Dianteiros','Faróis de Neblina','Tanque de Combustível','Palheta Traseira','Lanternas Traseiras','Estepe','Triângulo','Chave de Roda','Macaco','Antena','Documento do Veículo','Retirada de Pertences'];
+        const box = $('#items-checklist');
+        items.forEach(item=>{
+          const row = document.createElement('div');
+          row.className = 'flex items-center justify-between bg-white/70 border border-slate-200 rounded-xl px-3 py-2 shadow-sm';
+          row.innerHTML = `
+            <span class="text-sm text-slate-700">${item}</span>
+            <div class="select-wrap w-40">
+              <select class="nice-select pr-8">
+                <option>OK</option><option>Avariado</option><option>Faltante</option><option>N/A</option>
+              </select>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" class="text-slate-400"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>`;
+          box.appendChild(row);
+        });
+      })();
+
+      (function setupSignatures(){
+        const setup = (id)=>{
+          const c = $('#'+id), ctx = c.getContext('2d'); let drawing=false;
+          const ratio = Math.max(window.devicePixelRatio||1,1);
+          c.width = c.offsetWidth*ratio; c.height = c.offsetHeight*ratio; ctx.scale(ratio,ratio);
+          ctx.lineWidth=2; ctx.lineCap='round'; ctx.strokeStyle='#0f172a';
+          const pos=(e)=>{const r=c.getBoundingClientRect();const t=e.touches?e.touches[0]:null;return {x:(t?t.clientX:e.clientX)-r.left,y:(t?t.clientY:e.clientY)-r.top};};
+          const start=(e)=>{e.preventDefault();drawing=true;const p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);};
+          const draw =(e)=>{if(!drawing)return;e.preventDefault();const p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();};
+          const stop =()=>{drawing=false;ctx.closePath();};
+          c.addEventListener('mousedown',start); c.addEventListener('mousemove',draw);
+          c.addEventListener('mouseup',stop); c.addEventListener('mouseout',stop);
+          c.addEventListener('touchstart',start); c.addEventListener('touchmove',draw); c.addEventListener('touchend',stop);
+        };
+        setup('customer-signature'); setup('inspector-signature');
+        window.clearSignature=(id)=>{const c=$('#'+id),ctx=c.getContext('2d');const r=Math.max(window.devicePixelRatio||1,1);ctx.clearRect(0,0,c.width/r,c.height/r);};
+      })();
+
+      mv.addEventListener('load', ()=>setStatus('ok','Modelo carregado.'));
+      mv.addEventListener('error',()=>setStatus('err','Erro ao carregar GLB.'));
+
+      function createHotspotButton(preset, idx){
+        const btn=document.createElement('button');
+        btn.className='mv-pin'; btn.textContent='●'; btn.setAttribute('slot',`hotspot-${preset.id||('p'+idx)}`);
+        const n=normalizeOrUp(preset.norm||{x:0,y:1,z:0});
+        btn.dataset.position=`${preset.pos.x} ${preset.pos.y} ${preset.pos.z}`;
+        btn.dataset.normal  =`${n.x} ${n.y} ${n.z}`;
+        btn.setAttribute('aria-label',preset.label||`Peça ${idx+1}`);
+        const tip=document.createElement('span'); tip.className='tooltip'; tip.textContent=preset.label||`Peça ${idx+1}`; btn.appendChild(tip);
+        btn.addEventListener('click',(e)=>{e.stopPropagation(); openModalForNew(preset.pos,n,preset.label);});
+        return btn;
+      }
+      function renderHotspots(){ $$('button[slot^="hotspot-"]',mv).forEach(b=>b.remove()); PRESET_PARTS.forEach((p,i)=>mv.appendChild(createHotspotButton(p,i))); }
+
+      function openModalForNew(pos,norm,part=''){
+        editingIndex=null; damageForm.reset(); photoPreview.classList.add('hidden'); $('#modal-title').textContent='Adicionar Avaria';
+        inputPos.value=JSON.stringify(pos); inputNorm.value=JSON.stringify(norm); inputPart.value=part||''; damageModal.showModal();
+      }
+      function openModalForEdit(i){
+        editingIndex=i; const d=damages[i]; $('#modal-title').textContent='Editar Avaria';
+        inputPos.value=JSON.stringify(d.pos3d); inputNorm.value=JSON.stringify(d.norm3d);
+        $$('input[name="damage-type"]').forEach(r=>r.checked=(r.value===d.type));
+        inputPart.value=d.part||''; inputNotes.value=d.notes||'';
+        if(d.photo){ photoPreview.src=d.photo; photoPreview.classList.remove('hidden'); } else { photoPreview.classList.add('hidden'); }
+        damageModal.showModal();
+      }
+
+      $('#cancel-damage').addEventListener('click',()=>damageModal.close());
+      photoInput.addEventListener('change',(e)=>{ const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload=(ev)=>{photoPreview.src=ev.target.result; photoPreview.classList.remove('hidden');}; r.readAsDataURL(f); });
+
+      damageForm.addEventListener('submit',(e)=>{
+        e.preventDefault();
+        const pos=JSON.parse(inputPos.value||'{}'), norm=JSON.parse(inputNorm.value||'{}');
+        const type=($('input[name="damage-type"]:checked')?.value)||'Não especificado';
+        const part=inputPart.value?.trim()||'', notes=inputNotes.value||'';
+        const photo=(photoPreview.src||'').startsWith('data:image')?photoPreview.src:undefined;
+        const entry={pos3d:pos,norm3d:norm,type,part,notes,photo,timestamp:Date.now()};
+        if(editingIndex!==null) damages[editingIndex]={...damages[editingIndex],...entry}; else damages.push(entry);
+        renderList(); damageModal.close();
+      });
+
+      function renderList(){
+        listContainer.innerHTML='';
+        if(!damages.length){ listContainer.innerHTML='<p class="text-center text-slate-500 text-sm">Nenhuma avaria registrada.</p>'; return; }
+        damages.forEach((d,i)=>{
+          const coords=d.pos3d?` (x:${d.pos3d.x.toFixed(2)}, y:${d.pos3d.y.toFixed(2)}, z:${d.pos3d.z.toFixed(2)})`:'';
+          const row=document.createElement('div');
+          row.className='bg-white/70 border border-slate-200 rounded-xl px-4 py-3 shadow-sm flex justify-between items-center';
+          row.innerHTML=`
+            <div>
+              <p class="font-semibold text-slate-800">${i+1}. <span class="font-medium">${d.part||'Peça'}</span> – ${d.type}${coords}</p>
+              <p class="text-sm text-slate-500">${d.notes||'Sem observações.'}</p>
+            </div>
+            <div class="flex items-center gap-3">
+              <button class="edit text-blue-600 hover:text-blue-800 text-sm">Editar</button>
+              <button class="del text-rose-600 hover:text-rose-700 font-bold text-xl">&times;</button>
+            </div>`;
+          row.querySelector('.edit').onclick=()=>openModalForEdit(i);
+          row.querySelector('.del').onclick =()=>{ damages.splice(i,1); renderList(); };
+          listContainer.appendChild(row);
+        });
+      }
+
+      $('#generate-pdf').addEventListener('click', async ()=>{
+        const btn = $('#generate-pdf');
+        try{
+          btn.textContent='Gerando...'; btn.disabled=true;
+          const doc=new jsPDF({orientation:'p',unit:'mm',format:'a4'});
+          const root=document.querySelector('.max-w-5xl');
+          const canvas=await html2canvas(root,{scale:2,useCORS:true});
+          const imgData=canvas.toDataURL('image/png'); const {width:imgW,height:imgH}=doc.getImageProperties(imgData);
+          const pdfW=doc.internal.pageSize.getWidth(); const pdfH=(imgH*pdfW)/imgW;
+          doc.addImage(imgData,'PNG',0,0,pdfW,pdfH);
+          const placa = document.getElementById('veic_placa')?.value || 'veiculo';
+          const data  = new Date().toLocaleDateString('pt-BR').replace(/\//g,'-');
+          doc.save(`checklist-${placa}-${data}.pdf`);
+        } finally {
+          btn.textContent='Salvar e Gerar PDF'; btn.disabled=false;
+        }
+      });
+
+      renderHotspots(); renderList();
+    })();
+  </script>
+</body>
+</html>
