@@ -24,6 +24,11 @@ function atualizarWizardUI() {
   $('#wizard-indice').textContent = String(telaAtual);
   $('#btn-prev').disabled = (telaAtual === 1);
   $('#btn-next').textContent = (telaAtual === totalTelas) ? 'Finalizar' : 'Próximo →';
+
+  // >>> IMPORTANTE: quando chegar na Tela 4, prepare/redimensione as assinaturas
+  if (telaAtual === 4) {
+    ensureSignaturesReady();
+  }
 }
 
 function irParaTela(n) {
@@ -131,7 +136,7 @@ const pecasPreDefinidas = [
       linha.className = 'flex items-center justify-between bg-white/70 border border-slate-200 rounded-xl px-3 py-2 shadow-sm';
       linha.innerHTML = `
         <span class="text-sm text-slate-700">${item}</span>
-        <div class="select-wrap w-40">
+        <div class="select-wrap">
           <select class="nice-select pr-8">
             <option>OK</option><option>Avariado</option><option>Faltante</option><option>N/A</option>
           </select>
@@ -143,55 +148,88 @@ const pecasPreDefinidas = [
     });
   })();
 
-  /* ==========================================================
-     ASSINATURAS (canvas)
-     ========================================================== */
-  (function configurarAssinaturas(){
-    const configurarCanvas = (id)=>{
-      const canvas = $('#'+id);
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      let desenhando = false;
+/* ==========================================================
+   ASSINATURAS (canvas)
+   ========================================================== */
+(function configurarAssinaturas(){
+  function sizeCanvas(canvas) {
+    if (!canvas) return;
+    // mede com o elemento visível
+    const rect = canvas.getBoundingClientRect();
+    // se ainda está sem tamanho (p.ex. tela oculta), não faz nada agora
+    if (rect.width === 0 || rect.height === 0) return;
 
-      const ratio = Math.max(window.devicePixelRatio||1,1);
-      canvas.width  = canvas.offsetWidth * ratio;
-      canvas.height = canvas.offsetHeight * ratio;
-      ctx.scale(ratio, ratio);
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
 
-      ctx.lineWidth = 3;            // um pouco mais grosso pro PDF
-      ctx.lineCap   = 'round';
-      ctx.strokeStyle = '#0f172a';
+    // Define o buffer em pixels
+    canvas.width  = Math.max(1, Math.floor(rect.width  * ratio));
+    canvas.height = Math.max(1, Math.floor(rect.height * ratio));
 
-      const pos = (e)=>{
-        const r = canvas.getBoundingClientRect();
-        const t = e.touches ? e.touches[0] : null;
-        return { x: (t?t.clientX:e.clientX)-r.left, y: (t?t.clientY:e.clientY)-r.top };
-      };
-      const iniciar = (e)=>{ e.preventDefault(); desenhando = true; const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); };
-      const desenhar = (e)=>{ if(!desenhando) return; e.preventDefault(); const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); };
-      const parar = ()=>{ desenhando = false; ctx.closePath(); };
+    const ctx = canvas.getContext('2d');
+    // reseta transform e aplica escala
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(ratio, ratio);
 
-      canvas.addEventListener('mousedown', iniciar);
-      canvas.addEventListener('mousemove', desenhar);
-      canvas.addEventListener('mouseup', parar);
-      canvas.addEventListener('mouseout', parar);
-      canvas.addEventListener('touchstart', iniciar, {passive:false});
-      canvas.addEventListener('touchmove', desenhar, {passive:false});
-      canvas.addEventListener('touchend', parar);
+    // estilos de caneta
+    ctx.lineWidth = 3;
+    ctx.lineCap   = 'round';
+    ctx.strokeStyle = '#0f172a';
+
+    // marca como inicializado
+    canvas.dataset.inited = '1';
+  }
+
+  function attachDrawHandlers(canvasId) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let desenhando = false;
+
+    const pos = (e)=>{
+      const r = canvas.getBoundingClientRect();
+      const t = e.touches ? e.touches[0] : null;
+      return { x: (t?t.clientX:e.clientX)-r.left, y: (t?t.clientY:e.clientY)-r.top };
     };
+    const iniciar = (e)=>{ e.preventDefault(); desenhando = true; const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); };
+    const desenhar = (e)=>{ if(!desenhando) return; e.preventDefault(); const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); };
+    const parar = ()=>{ desenhando = false; try{ ctx.closePath(); }catch{} };
 
-    configurarCanvas('customer-signature');
-    configurarCanvas('inspector-signature');
+    canvas.addEventListener('mousedown', iniciar);
+    canvas.addEventListener('mousemove', desenhar);
+    canvas.addEventListener('mouseup', parar);
+    canvas.addEventListener('mouseout', parar);
+    canvas.addEventListener('touchstart', iniciar, { passive: false });
+    canvas.addEventListener('touchmove', desenhar, { passive: false });
+    canvas.addEventListener('touchend', parar);
+  }
 
-    // Expor função global para botão "Limpar"
-    window.clearSignature = (id)=>{
-      const canvas = document.getElementById(id);
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      const r = Math.max(window.devicePixelRatio||1,1);
-      ctx.clearRect(0, 0, canvas.width/r, canvas.height/r);
-    };
-  })();
+  // prepara handlers (uma vez)
+  attachDrawHandlers('customer-signature');
+  attachDrawHandlers('inspector-signature');
+
+  // função global para limpar (mantida)
+  window.clearSignature = (id)=>{
+    const canvas = document.getElementById(id);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    // limpa a área lógica (após scale)
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+    ctx.clearRect(0, 0, canvas.width / ratio, canvas.height / ratio);
+  };
+
+  // Redimensiona quando a tela 4 fica visível ou quando a janela muda de tamanho
+  window.ensureSignaturesReady = ()=>{
+    sizeCanvas(document.getElementById('customer-signature'));
+    sizeCanvas(document.getElementById('inspector-signature'));
+  };
+
+  // se o usuário abrir direto na 4 (raro), garante o ajuste
+  if (telaAtual === 4) ensureSignaturesReady();
+  window.addEventListener('resize', ()=> {
+    if (telaAtual === 4) ensureSignaturesReady();
+  });
+})();
+
 
   /* ==========================================================
      STATUS DO MODELO 3D
