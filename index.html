@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Checklist Digital – 3D (Hotspots via PRESET_PARTS)</title>
+  <title>Checklist Digital – 3D (Wizard)</title>
 
   <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -11,6 +11,7 @@
   <!-- PDF helpers -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 
   <!-- Google model-viewer -->
   <script type="module" src="https://unpkg.com/@google/model-viewer@^3.3.0/dist/model-viewer.min.js"></script>
@@ -36,222 +37,248 @@
             <p class="text-slate-500">Clique nos pinos azuis para registrar avarias.</p>
           </div>
         </div>
+
+        <!-- Stepper / Progresso -->
+        <nav class="wizard mt-2">
+          <ol class="wizard-steps">
+            <li data-step="1" class="ativo">Dados</li>
+            <li data-step="2">Inspeção</li>
+            <li data-step="3">Checklist</li>
+            <li data-step="4">Observações</li>
+          </ol>
+        </nav>
       </header>
 
-      <div class="p-6 sm:p-8 space-y-10">
+      <div class="p-6 sm:p-8">
+        <!-- === TELA 1: OS / Cliente / Veículo === -->
+        <section class="tela" data-tela="1">
+          <div class="grid grid-cols-1 gap-8">
 
-        <!-- ---------- Dados OS / Cliente / Veículo ---------- -->
-        <section class="grid grid-cols-1 gap-8">
-          <!-- OS -->
+            <!-- OS -->
+            <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
+              <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
+                <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-blue-50 text-blue-600 text-xs">OS</span>
+                Dados da Ordem de Serviço
+              </h2>
+              <div class="max-w-xl">
+                <div class="fl-group">
+                  <input class="fl-input" placeholder=" " type="text" id="os_interna">
+                  <label class="fl-label" for="os_interna">O.S Interna</label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Cliente & Veículo -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <!-- Cliente -->
+              <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
+                <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
+                  <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 text-xs">👤</span>
+                  Dados do Cliente
+                </h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div class="fl-group col-span-2">
+                    <input class="fl-input" placeholder=" " type="text" id="cli_nome">
+                    <label class="fl-label" for="cli_nome">Nome do Cliente</label>
+                  </div>
+                  <div class="fl-group">
+                    <input class="fl-input" placeholder=" " type="text" id="cli_doc">
+                    <label class="fl-label" for="cli_doc">CPF/CNPJ</label>
+                  </div>
+                  <div class="fl-group">
+                    <input class="fl-input" placeholder=" " type="tel" id="cli_tel">
+                    <label class="fl-label" for="cli_tel">Telefone</label>
+                  </div>
+                  <div class="fl-group col-span-2">
+                    <input class="fl-input" placeholder=" " type="text" id="cli_end">
+                    <label class="fl-label" for="cli_end">Endereço</label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Veículo -->
+              <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
+                <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
+                  <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-violet-50 text-violet-600 text-xs">🚗</span>
+                  Dados do Veículo
+                </h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div class="fl-group">
+                    <input class="fl-input" placeholder=" " type="text" id="veic_nome">
+                    <label class="fl-label" for="veic_nome">Veículo</label>
+                  </div>
+                  <div class="fl-group">
+                    <input class="fl-input" placeholder=" " type="text" id="veic_placa">
+                    <label class="fl-label" for="veic_placa">Placa</label>
+                  </div>
+                  <div class="fl-group">
+                    <input class="fl-input" placeholder=" " type="text" id="veic_cor">
+                    <label class="fl-label" for="veic_cor">Cor</label>
+                  </div>
+                  <div class="fl-group">
+                    <input class="fl-input" placeholder=" " type="number" id="veic_km">
+                    <label class="fl-label" for="veic_km">KM</label>
+                  </div>
+                  <div class="fl-group col-span-2">
+                    <input class="fl-input" placeholder=" " type="datetime-local" id="entry_datetime">
+                    <label class="fl-label" for="entry_datetime">Data & Hora de Entrada</label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- === TELA 2: Inspeção 3D + Combustível === -->
+        <section class="tela hidden" data-tela="2">
+          <!-- Inspeção 3D -->
+          <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm mb-8">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-sky-50 text-sky-600 text-xs">3D</span>
+                Inspeção 3D
+              </h2>
+              <span id="model-status" class="badge badge-warn">Carregando…</span>
+            </div>
+            <p class="text-sm text-slate-500 mb-3">Clique nos pinos azuis posicionados no veículo para registrar a avaria.</p>
+
+            <model-viewer id="car3d"
+              src="models/carro.glb"
+              camera-controls
+              interaction-prompt="auto"
+              exposure="0.9"
+              shadow-intensity="1"
+              environment-image="neutral"
+              ar
+              ar-modes="webxr scene-viewer quick-look">
+              <!-- Hotspots via JS -->
+            </model-viewer>
+
+            <div id="damages-list" class="mt-4 space-y-2"></div>
+          </div>
+
+          <!-- Combustível -->
           <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
             <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
-              <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-blue-50 text-blue-600 text-xs">OS</span>
-              Dados da Ordem de Serviço
+              <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-amber-50 text-amber-600 text-xs">⛽</span>
+              Nível de Combustível
             </h2>
-            <div class="max-w-xl">
-              <div class="fl-group">
-                <input class="fl-input" placeholder=" " type="text" id="os_interna">
-                <label class="fl-label" for="os_interna">O.S Interna</label>
-              </div>
-            </div>
-          </div>
 
-          <!-- Cliente & Veículo -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <!-- Cliente -->
-            <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
-              <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
-                <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 text-xs">👤</span>
-                Dados do Cliente
-              </h2>
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div class="fl-group col-span-2">
-                  <input class="fl-input" placeholder=" " type="text" id="cli_nome">
-                  <label class="fl-label" for="cli_nome">Nome do Cliente</label>
-                </div>
-                <div class="fl-group">
-                  <input class="fl-input" placeholder=" " type="text" id="cli_doc">
-                  <label class="fl-label" for="cli_doc">CPF/CNPJ</label>
-                </div>
-                <div class="fl-group">
-                  <input class="fl-input" placeholder=" " type="tel" id="cli_tel">
-                  <label class="fl-label" for="cli_tel">Telefone</label>
-                </div>
-                <div class="fl-group col-span-2">
-                  <input class="fl-input" placeholder=" " type="text" id="cli_end">
-                  <label class="fl-label" for="cli_end">Endereço</label>
-                </div>
-              </div>
-            </div>
+            <div class="flex flex-col items-center gap-4">
+              <!-- Gauge -->
+              <svg id="fuel-gauge" viewBox="0 0 260 150" class="w-full max-w-md">
+                <defs>
+                  <linearGradient id="fuelGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%"  stop-color="#ef4444"/>
+                    <stop offset="50%" stop-color="#f59e0b"/>
+                    <stop offset="100%" stop-color="#22c55e"/>
+                  </linearGradient>
+                </defs>
 
-            <!-- Veículo -->
-            <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
-              <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
-                <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-violet-50 text-violet-600 text-xs">🚗</span>
-                Dados do Veículo
-              </h2>
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div class="fl-group">
-                  <input class="fl-input" placeholder=" " type="text" id="veic_nome">
-                  <label class="fl-label" for="veic_nome">Veículo</label>
-                </div>
-                <div class="fl-group">
-                  <input class="fl-input" placeholder=" " type="text" id="veic_placa">
-                  <label class="fl-label" for="veic_placa">Placa</label>
-                </div>
-                <div class="fl-group">
-                  <input class="fl-input" placeholder=" " type="text" id="veic_cor">
-                  <label class="fl-label" for="veic_cor">Cor</label>
-                </div>
-                <div class="fl-group">
-                  <input class="fl-input" placeholder=" " type="number" id="veic_km">
-                  <label class="fl-label" for="veic_km">KM</label>
-                </div>
-                <div class="fl-group col-span-2">
-                  <input class="fl-input" placeholder=" " type="datetime-local" id="entry_datetime">
-                  <label class="fl-label" for="entry_datetime">Data & Hora de Entrada</label>
-                </div>
+                <path id="arc-track"
+                      d="M 30 120 A 100 100 0 0 1 230 120"
+                      fill="none" stroke="#e5e7eb" stroke-width="14" stroke-linecap="round" />
+
+                <path id="arc-fill"
+                      d="M 30 120 A 100 100 0 0 1 230 120"
+                      fill="none" stroke="url(#fuelGrad)" stroke-width="14" stroke-linecap="round"
+                      style="stroke-dasharray: 0 1; stroke-dashoffset: 0;" />
+
+                <g font-size="12" fill="#374151" font-weight="600">
+                  <text x="30"  y="132" text-anchor="middle">E</text>
+                  <text x="130" y="16"  text-anchor="middle">1/2</text>
+                  <text x="230" y="132" text-anchor="middle" fill="#047857">F</text>
+                </g>
+
+                <g id="ticks" stroke="#cbd5e1" stroke-width="2"></g>
+
+                <circle cx="130" cy="120" r="5" fill="#111827" />
+                <g id="needle" transform="rotate(-90,130,120)">
+                  <rect x="129" y="30" width="2" height="90" rx="1" fill="#111827"></rect>
+                  <circle cx="130" cy="30" r="3" fill="#111827"></circle>
+                </g>
+              </svg>
+
+              <div class="w-full max-w-md flex items-center gap-3">
+                <span class="font-mono text-sm font-bold text-rose-500">E</span>
+                <input id="fuel-range" type="range" min="0" max="100" value="50" class="flex-1">
+                <span class="font-mono text-sm font-bold text-emerald-600">F</span>
+              </div>
+
+              <div class="text-sm text-slate-600">
+                Nível: <span id="fuel-percent" class="font-semibold text-slate-800">50%</span>
               </div>
             </div>
           </div>
         </section>
 
-        <!-- ---------- 3D ---------- -->
-        <section class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2">
-              <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-sky-50 text-sky-600 text-xs">3D</span>
-              Inspeção 3D
+        <!-- === TELA 3: Checklist === -->
+        <section class="tela hidden" data-tela="3">
+          <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
+            <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
+              <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-slate-50 text-slate-600 text-xs">☑️</span>
+              Checklist de Itens
             </h2>
-            <span id="model-status" class="badge badge-warn">Carregando…</span>
+            <div id="items-checklist" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
           </div>
-          <p class="text-sm text-slate-500 mb-3">Clique nos pinos azuis posicionados no veículo para registrar a avaria.</p>
-
-          <model-viewer id="car3d"
-            src="models/carro.glb"
-            camera-controls
-            interaction-prompt="auto"
-            exposure="0.9"
-            shadow-intensity="1"
-            environment-image="neutral"
-            ar
-            ar-modes="webxr scene-viewer quick-look">
-            <!-- Hotspots via JS -->
-          </model-viewer>
-
-          <div id="damages-list" class="mt-4 space-y-2"></div>
         </section>
 
-        <!-- ---------- Nível de Combustível (Gauge 180° com ponteiro) ---------- -->
-        <section class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
-          <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
-            <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-amber-50 text-amber-600 text-xs">⛽</span>
-            Nível de Combustível
-          </h2>
+        <!-- === TELA 4: Observações e Assinaturas === -->
+        <section class="tela hidden" data-tela="4">
+          <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
+            <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
+              <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-pink-50 text-pink-600 text-xs">📝</span>
+              Observações e Assinaturas
+            </h2>
 
-          <div class="flex flex-col items-center gap-4">
-            <!-- Gauge -->
-            <svg id="fuel-gauge" viewBox="0 0 260 150" class="w-full max-w-md">
-              <defs>
-                <linearGradient id="fuelGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%"  stop-color="#ef4444"/>
-                  <stop offset="50%" stop-color="#f59e0b"/>
-                  <stop offset="100%" stop-color="#22c55e"/>
-                </linearGradient>
-              </defs>
-
-              <path id="arc-track"
-                    d="M 30 120 A 100 100 0 0 1 230 120"
-                    fill="none" stroke="#e5e7eb" stroke-width="14" stroke-linecap="round" />
-
-              <path id="arc-fill"
-                    d="M 30 120 A 100 100 0 0 1 230 120"
-                    fill="none" stroke="url(#fuelGrad)" stroke-width="14" stroke-linecap="round"
-                    style="stroke-dasharray: 0 1; stroke-dashoffset: 0;" />
-
-              <g font-size="12" fill="#374151" font-weight="600">
-                <text x="30"  y="132" text-anchor="middle">E</text>
-                <text x="130" y="16"  text-anchor="middle">1/2</text>
-                <text x="230" y="132" text-anchor="middle" fill="#047857">F</text>
-              </g>
-
-              <g id="ticks" stroke="#cbd5e1" stroke-width="2"></g>
-
-              <circle cx="130" cy="120" r="5" fill="#111827" />
-              <g id="needle" transform="rotate(-90,130,120)">
-                <rect x="129" y="30" width="2" height="90" rx="1" fill="#111827"></rect>
-                <circle cx="130" cy="30" r="3" fill="#111827"></circle>
-              </g>
-            </svg>
-
-            <div class="w-full max-w-md flex items-center gap-3">
-              <span class="font-mono text-sm font-bold text-rose-500">E</span>
-              <input id="fuel-range" type="range" min="0" max="100" value="50" class="flex-1">
-              <span class="font-mono text-sm font-bold text-emerald-600">F</span>
+            <div class="fl-group mb-6">
+              <textarea id="obs" class="fl-input min-h-[110px]" placeholder=" "></textarea>
+              <label class="fl-label" for="obs">Demais observações</label>
             </div>
 
-            <div class="text-sm text-slate-600">
-              Nível: <span id="fuel-percent" class="font-semibold text-slate-800">50%</span>
-            </div>
-          </div>
-        </section>
-
-        <!-- ---------- Checklist ---------- -->
-        <section class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
-          <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
-            <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-slate-50 text-slate-600 text-xs">☑️</span>
-            Checklist de Itens
-          </h2>
-          <div id="items-checklist" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
-        </section>
-
-        <!-- ---------- Observações / Assinaturas ---------- -->
-        <section class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
-          <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
-            <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-pink-50 text-pink-600 text-xs">📝</span>
-            Observações e Assinaturas
-          </h2>
-
-          <div class="fl-group mb-6">
-            <textarea id="obs" class="fl-input min-h-[110px]" placeholder=" "></textarea>
-            <label class="fl-label" for="obs">Demais observações</label>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div>
-              <label class="block mb-2 font-medium text-slate-700">Assinatura do Cliente</label>
-              <div class="rounded-xl border border-slate-200 bg-white/60 p-3">
-                <canvas id="customer-signature" class="w-full h-40 bg-slate-50 rounded-md cursor-crosshair"></canvas>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div>
+                <label class="block mb-2 font-medium text-slate-700">Assinatura do Cliente</label>
+                <div class="rounded-xl border border-slate-200 bg-white/60 p-3">
+                  <canvas id="customer-signature" class="w-full h-40 bg-slate-50 rounded-md cursor-crosshair"></canvas>
+                </div>
+                <button onclick="clearSignature('customer-signature')" class="mt-2 text-sm text-slate-600 hover:text-rose-600 transition">Limpar</button>
               </div>
-              <button onclick="clearSignature('customer-signature')" class="mt-2 text-sm text-slate-600 hover:text-rose-600 transition">Limpar</button>
-            </div>
-            <div>
-              <label class="block mb-2 font-medium text-slate-700">Assinatura do Responsável</label>
-              <div class="rounded-xl border border-slate-200 bg-white/60 p-3">
-                <canvas id="inspector-signature" class="w-full h-40 bg-slate-50 rounded-md cursor-crosshair"></canvas>
+              <div>
+                <label class="block mb-2 font-medium text-slate-700">Assinatura do Responsável</label>
+                <div class="rounded-xl border border-slate-200 bg-white/60 p-3">
+                  <canvas id="inspector-signature" class="w-full h-40 bg-slate-50 rounded-md cursor-crosshair"></canvas>
+                </div>
+                <button onclick="clearSignature('inspector-signature')" class="mt-2 text-sm text-slate-600 hover:text-rose-600 transition">Limpar</button>
               </div>
-              <button onclick="clearSignature('inspector-signature')" class="mt-2 text-sm text-slate-600 hover:text-rose-600 transition">Limpar</button>
             </div>
           </div>
+
+          <!-- Ações (somente na última tela) -->
+          <section class="mt-6">
+            <div class="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur p-3 sm:p-4 shadow-lg flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
+              <button id="generate-pdf" class="inline-flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-blue-700 active:scale-[.99] shadow-[0_12px_24px_rgba(37,99,235,.25)] transition w-full sm:w-auto">
+                Salvar e Gerar PDF
+              </button>
+
+              <button id="generate-json" class="inline-flex items-center justify-center gap-2 bg-emerald-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-emerald-700 active:scale-[.99] shadow-[0_12px_24px_rgba(16,185,129,.25)] transition w-full sm:w-auto">
+                Gerar JSON
+              </button>
+
+              <button onclick="window.location.reload()" class="inline-flex items-center justify-center gap-2 bg-white text-slate-800 font-semibold py-3 px-6 rounded-xl border border-slate-200 hover:bg-slate-50 active:scale-[.99] transition w-full sm:w-auto">
+                Limpar Formulário
+              </button>
+            </div>
+          </section>
         </section>
 
-        <!-- ---------- Ações ---------- -->
-        <section class="sticky bottom-4 z-10">
-          <div class="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur p-3 sm:p-4 shadow-lg flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
-            <button id="generate-pdf" class="inline-flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-blue-700 active:scale-[.99] shadow-[0_12px_24px_rgba(37,99,235,.25)] transition w-full sm:w-auto">
-              Salvar e Gerar PDF
-            </button>
-
-            <button id="generate-json" class="inline-flex items-center justify-center gap-2 bg-emerald-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-emerald-700 active:scale-[.99] shadow-[0_12px_24px_rgba(16,185,129,.25)] transition w-full sm:w-auto">
-              Gerar JSON
-            </button>
-
-            <button onclick="window.location.reload()" class="inline-flex items-center justify-center gap-2 bg-white text-slate-800 font-semibold py-3 px-6 rounded-xl border border-slate-200 hover:bg-slate-50 active:scale-[.99] transition w-full sm:w-auto">
-              Limpar Formulário
-            </button>
-          </div>
-        </section>
-
+        <!-- Nav do wizard -->
+        <div class="wizard-nav mt-8 flex items-center justify-between gap-3">
+          <button id="btn-prev" class="btn-nav" disabled>← Anterior</button>
+          <div class="text-sm text-slate-500"><span id="wizard-indice">1</span>/4</div>
+          <button id="btn-next" class="btn-nav">Próximo →</button>
+        </div>
       </div>
     </div>
   </div>
@@ -310,11 +337,6 @@
   </dialog>
 
   <!-- Lógica do app -->
-   <!-- PDF helpers -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
-
   <script src="app.js"></script>
 </body>
 </html>

@@ -1,5 +1,51 @@
 "use strict";
 
+/* ========== Helpers de seleção DOM ========== */
+const $  = (s, r=document)=>r.querySelector(s);
+const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
+
+/* ==========================================================
+   WIZARD (4 telas)
+   ========================================================== */
+const totalTelas = 4;
+let telaAtual = 1;
+
+function atualizarWizardUI() {
+  // Mostra/oculta telas
+  $$('.tela').forEach(sec=>{
+    const n = Number(sec.dataset.tela);
+    sec.classList.toggle('hidden', n !== telaAtual);
+  });
+  // Stepper ativo
+  $$('.wizard-steps li').forEach(li=>{
+    li.classList.toggle('ativo', Number(li.dataset.step) === telaAtual);
+  });
+  // Índice e botões
+  $('#wizard-indice').textContent = String(telaAtual);
+  $('#btn-prev').disabled = (telaAtual === 1);
+  $('#btn-next').textContent = (telaAtual === totalTelas) ? 'Finalizar' : 'Próximo →';
+}
+
+function irParaTela(n) {
+  telaAtual = Math.max(1, Math.min(totalTelas, n));
+  atualizarWizardUI();
+}
+
+function proximaTela() {
+  if (telaAtual < totalTelas) irParaTela(telaAtual + 1);
+  else window.scrollTo({ top: 0, behavior: 'smooth' }); // Finalizar
+}
+function telaAnterior() { irParaTela(telaAtual - 1); }
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  $('#btn-prev')?.addEventListener('click', telaAnterior);
+  $('#btn-next')?.addEventListener('click', proximaTela);
+  $$('.wizard-steps li').forEach(li=>{
+    li.addEventListener('click', ()=> irParaTela(Number(li.dataset.step)));
+  });
+  atualizarWizardUI();
+});
+
 /* ==========================================================
    HOTSPOTS PREDEFINIDOS — edite conforme o modelo 3D
    ========================================================== */
@@ -25,14 +71,10 @@ const pecasPreDefinidas = [
 ];
 
 /* ==========================================================
-   BOOTSTRAP DA PÁGINA
+   APP MAIN
    ========================================================== */
 (function iniciarApp(){
   const { jsPDF } = window.jspdf;
-
-  // Shortcuts de seleção
-  const $  = (s, r=document)=>r.querySelector(s);
-  const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
 
   /* ---------- Cache de elementos ---------- */
   const modelo3d           = $('#car3d');
@@ -57,7 +99,7 @@ const pecasPreDefinidas = [
   let avarias = [];
   let indiceEdicao = null;
 
-  /* ---------- Utilitários ---------- */
+  /* ---------- Utils ---------- */
   const normalizarOuCima = (v)=>{
     const L = Math.hypot(v?.x||0, v?.y||0, v?.z||0);
     return L ? { x:v.x/L, y:v.y/L, z:v.z/L } : { x:0, y:1, z:0 };
@@ -69,10 +111,11 @@ const pecasPreDefinidas = [
   const pegarValorInput = (id)=> (document.getElementById(id)?.value ?? '').trim();
 
   // Preencher data/hora inicial
-  $('#entry_datetime').value = new Date().toISOString().slice(0,16);
+  const entryDt = $('#entry_datetime');
+  if (entryDt) entryDt.value = new Date().toISOString().slice(0,16);
 
   /* ==========================================================
-     CHECKLIST (itens padrão)
+     BUILD CHECKLIST ITENS
      ========================================================== */
   (function construirChecklist(){
     const itens = [
@@ -82,6 +125,7 @@ const pecasPreDefinidas = [
       'Macaco','Antena','Documento do Veículo','Retirada de Pertences'
     ];
     const container = $('#items-checklist');
+    if (!container) return;
     itens.forEach(item=>{
       const linha = document.createElement('div');
       linha.className = 'flex items-center justify-between bg-white/70 border border-slate-200 rounded-xl px-3 py-2 shadow-sm';
@@ -100,11 +144,12 @@ const pecasPreDefinidas = [
   })();
 
   /* ==========================================================
-     ASSINATURAS
+     ASSINATURAS (canvas)
      ========================================================== */
   (function configurarAssinaturas(){
     const configurarCanvas = (id)=>{
       const canvas = $('#'+id);
+      if (!canvas) return;
       const ctx = canvas.getContext('2d');
       let desenhando = false;
 
@@ -113,7 +158,7 @@ const pecasPreDefinidas = [
       canvas.height = canvas.offsetHeight * ratio;
       ctx.scale(ratio, ratio);
 
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 3;            // um pouco mais grosso pro PDF
       ctx.lineCap   = 'round';
       ctx.strokeStyle = '#0f172a';
 
@@ -130,8 +175,8 @@ const pecasPreDefinidas = [
       canvas.addEventListener('mousemove', desenhar);
       canvas.addEventListener('mouseup', parar);
       canvas.addEventListener('mouseout', parar);
-      canvas.addEventListener('touchstart', iniciar);
-      canvas.addEventListener('touchmove', desenhar);
+      canvas.addEventListener('touchstart', iniciar, {passive:false});
+      canvas.addEventListener('touchmove', desenhar, {passive:false});
       canvas.addEventListener('touchend', parar);
     };
 
@@ -141,6 +186,7 @@ const pecasPreDefinidas = [
     // Expor função global para botão "Limpar"
     window.clearSignature = (id)=>{
       const canvas = document.getElementById(id);
+      if (!canvas) return;
       const ctx = canvas.getContext('2d');
       const r = Math.max(window.devicePixelRatio||1,1);
       ctx.clearRect(0, 0, canvas.width/r, canvas.height/r);
@@ -150,8 +196,10 @@ const pecasPreDefinidas = [
   /* ==========================================================
      STATUS DO MODELO 3D
      ========================================================== */
-  modelo3d.addEventListener('load', ()=> setarStatus('ok', 'Modelo carregado.'));
-  modelo3d.addEventListener('error',()=> setarStatus('err','Erro ao carregar GLB.'));
+  if (modelo3d) {
+    modelo3d.addEventListener('load', ()=> setarStatus('ok', 'Modelo carregado.'));
+    modelo3d.addEventListener('error',()=> setarStatus('err','Erro ao carregar GLB.'));
+  }
 
   /* ==========================================================
      HOTSPOTS
@@ -180,6 +228,7 @@ const pecasPreDefinidas = [
   }
 
   function renderizarHotspots(){
+    if (!modelo3d) return;
     $$('button[slot^="hotspot-"]', modelo3d).forEach(b=>b.remove());
     pecasPreDefinidas.forEach((p, i)=> modelo3d.appendChild(criarBotaoHotspot(p, i)));
   }
@@ -220,9 +269,9 @@ const pecasPreDefinidas = [
     modalAvaria.showModal();
   }
 
-  botaoCancelarAvaria.addEventListener('click', ()=> modalAvaria.close());
+  $('#cancel-damage')?.addEventListener('click', ()=> modalAvaria.close());
 
-  entradaFoto.addEventListener('change', (e)=>{
+  entradaFoto?.addEventListener('change', (e)=>{
     const arquivo = e.target.files?.[0];
     if(!arquivo) return;
     const reader = new FileReader();
@@ -233,7 +282,7 @@ const pecasPreDefinidas = [
     reader.readAsDataURL(arquivo);
   });
 
-  formularioAvaria.addEventListener('submit', (e)=>{
+  formularioAvaria?.addEventListener('submit', (e)=>{
     e.preventDefault();
 
     const pos   = JSON.parse(entradaPosicao3d.value||'{}');
@@ -255,6 +304,7 @@ const pecasPreDefinidas = [
   });
 
   function renderizarListaAvarias(){
+    if (!listaAvarias) return;
     listaAvarias.innerHTML = '';
     if(!avarias.length){
       listaAvarias.innerHTML = '<p class="text-center text-slate-500 text-sm">Nenhuma avaria registrada.</p>';
@@ -289,6 +339,8 @@ const pecasPreDefinidas = [
     const trilhaArc     = $('#arc-track');
     const preenchArc    = $('#arc-fill');
     const marcasTicks   = $('#ticks');
+
+    if (!controleRange || !rotuloPercent || !trilhaArc || !preenchArc || !ponteiro) return;
 
     const comprimentoArc = trilhaArc.getTotalLength();
     preenchArc.style.strokeDasharray = `${comprimentoArc} ${comprimentoArc}`;
@@ -325,13 +377,17 @@ const pecasPreDefinidas = [
      COLETORES / EXPORTADORES (JSON + PDF)
      ========================================================== */
   function canvasParaBase64(canvas){
-    const ratio = Math.max(window.devicePixelRatio||1,1);
-    const w = canvas.width/ratio, h = canvas.height/ratio;
-    const tmp = document.createElement('canvas');
-    tmp.width = w; tmp.height = h;
-    const ctx = tmp.getContext('2d');
-    ctx.drawImage(canvas, 0, 0, w, h);
-    return tmp.toDataURL('image/png');
+    try { return canvas.toDataURL('image/png'); } catch { return null; }
+  }
+
+  function canvasVazio(canvas){
+    const ctx = canvas.getContext('2d');
+    const { width, height } = canvas;
+    const data = ctx.getImageData(0,0,width,height).data;
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i] !== 0) return false;
+    }
+    return true;
   }
 
   async function elementoParaBase64(el){
@@ -363,13 +419,18 @@ const pecasPreDefinidas = [
   function coletarAssinaturas(){
     const c1 = document.getElementById('customer-signature');
     const c2 = document.getElementById('inspector-signature');
+
+    const cliente = (c1 && !canvasVazio(c1)) ? canvasParaBase64(c1) : null;
+    const responsavel = (c2 && !canvasVazio(c2)) ? canvasParaBase64(c2) : null;
+
     return {
-      assinaturaClienteBase64:  c1 ? canvasParaBase64(c1) : null,
-      assinaturaResponsavelBase64: c2 ? canvasParaBase64(c2) : null
+      assinaturaClienteBase64: cliente,
+      assinaturaResponsavelBase64: responsavel
     };
   }
 
   async function coletarCapturas(){
+    if (!modelo3d) return { capturaCarroBase64: null, capturaPaginaBase64: null };
     const carro = await elementoParaBase64(modelo3d);
     const pagina = await elementoParaBase64(document.querySelector('.max-w-5xl'));
     return { capturaCarroBase64: carro, capturaPaginaBase64: pagina };
@@ -444,8 +505,6 @@ const pecasPreDefinidas = [
       botaoGerarJson.disabled = true;
 
       const dados = await montarChecklistJson();
-      console.log('Checklist JSON:', dados);
-
       const placa = pegarValorInput('veic_placa') || 'veiculo';
       const dataBR = new Date().toLocaleDateString('pt-BR').replace(/\//g,'-');
       baixarJson(dados, `checklist-${placa}-${dataBR}.json`);
@@ -461,8 +520,6 @@ const pecasPreDefinidas = [
   /* ==========================================================
      PDF ESTRUTURADO POR DADOS (jsPDF + AutoTable)
      ========================================================== */
-
-  // Helpers de formatação
   function formatarDataBR(isoOuMs) {
     try { return new Date(isoOuMs).toLocaleString('pt-BR'); } catch { return isoOuMs || ''; }
   }
@@ -470,15 +527,9 @@ const pecasPreDefinidas = [
     const x = Number(n);
     return isNaN(x) ? '' : x.toString();
   }
-  function moedaBR(n) {
-    const x = Number(n);
-    if (isNaN(x)) return '';
-    return x.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  }
 
-  // Gera o PDF com base no payload (sem print da tela)
   async function gerarPdfComDados(payload) {
-    const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+    const doc = new window.jspdf.jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
 
     const margem = 12;
     let y = margem;
@@ -586,6 +637,11 @@ const pecasPreDefinidas = [
     doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
     doc.text('Assinaturas', margem, y); y += 6;
 
+    // fundo branco
+    doc.setFillColor(255,255,255);
+    doc.rect(margem, y, wAss, hAss, 'F');
+    doc.rect(210 - margem - wAss, y, wAss, hAss, 'F');
+
     if (ass.assinaturaClienteBase64) {
       doc.addImage(ass.assinaturaClienteBase64, 'PNG', margem, y, wAss, hAss);
       doc.setFontSize(9); doc.setFont('helvetica', 'normal');
@@ -613,8 +669,8 @@ const pecasPreDefinidas = [
     doc.save(`checklist-${placa}-${dataBR}.pdf`);
   }
 
-  // Botão: Gerar PDF (AGORA via dados, não print da tela)
-  botaoGerarPdf.addEventListener('click', async ()=>{
+  // Botão: Gerar PDF (via dados)
+  botaoGerarPdf?.addEventListener('click', async ()=>{
     try{
       botaoGerarPdf.textContent = 'Gerando...';
       botaoGerarPdf.disabled = true;
