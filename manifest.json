@@ -1,0 +1,11 @@
+{
+  "background_color": "#ffffff",
+  "dir": "auto",
+  "display": "standalone",
+  "name": "intranet-check-list-app.naayqg.easypanel",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "intranet-check-list-app.naayqg.easypanel",
+  "start_url": "/",
+  "theme_color": "#ffffff"
+}

@@ -154,28 +154,22 @@ const pecasPreDefinidas = [
 (function configurarAssinaturas(){
   function sizeCanvas(canvas) {
     if (!canvas) return;
-    // mede com o elemento visível
     const rect = canvas.getBoundingClientRect();
-    // se ainda está sem tamanho (p.ex. tela oculta), não faz nada agora
     if (rect.width === 0 || rect.height === 0) return;
 
     const ratio = Math.max(window.devicePixelRatio || 1, 1);
 
-    // Define o buffer em pixels
     canvas.width  = Math.max(1, Math.floor(rect.width  * ratio));
     canvas.height = Math.max(1, Math.floor(rect.height * ratio));
 
     const ctx = canvas.getContext('2d');
-    // reseta transform e aplica escala
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.scale(ratio, ratio);
 
-    // estilos de caneta
     ctx.lineWidth = 3;
     ctx.lineCap   = 'round';
     ctx.strokeStyle = '#0f172a';
 
-    // marca como inicializado
     canvas.dataset.inited = '1';
   }
 
@@ -203,27 +197,22 @@ const pecasPreDefinidas = [
     canvas.addEventListener('touchend', parar);
   }
 
-  // prepara handlers (uma vez)
   attachDrawHandlers('customer-signature');
   attachDrawHandlers('inspector-signature');
 
-  // função global para limpar (mantida)
   window.clearSignature = (id)=>{
     const canvas = document.getElementById(id);
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    // limpa a área lógica (após scale)
     const ratio = Math.max(window.devicePixelRatio || 1, 1);
     ctx.clearRect(0, 0, canvas.width / ratio, canvas.height / ratio);
   };
 
-  // Redimensiona quando a tela 4 fica visível ou quando a janela muda de tamanho
   window.ensureSignaturesReady = ()=>{
     sizeCanvas(document.getElementById('customer-signature'));
     sizeCanvas(document.getElementById('inspector-signature'));
   };
 
-  // se o usuário abrir direto na 4 (raro), garante o ajuste
   if (telaAtual === 4) ensureSignaturesReady();
   window.addEventListener('resize', ()=> {
     if (telaAtual === 4) ensureSignaturesReady();
@@ -467,11 +456,33 @@ const pecasPreDefinidas = [
     };
   }
 
+  // >>>>>>> CAPTURA ROBUSTA do <model-viewer> + fallback
   async function coletarCapturas(){
-    if (!modelo3d) return { capturaCarroBase64: null, capturaPaginaBase64: null };
-    const carro = await elementoParaBase64(modelo3d);
-    const pagina = await elementoParaBase64(document.querySelector('.max-w-5xl'));
-    return { capturaCarroBase64: carro, capturaPaginaBase64: pagina };
+    let capturaCarroBase64 = null;
+    try {
+      if (modelo3d && modelo3d.shadowRoot) {
+        const glCanvas = modelo3d.shadowRoot.querySelector('canvas');
+        if (glCanvas) {
+          capturaCarroBase64 = glCanvas.toDataURL('image/png'); // base64 direto do WebGL
+        }
+      }
+      if (!capturaCarroBase64) {
+        const canvasFallback = await html2canvas(modelo3d, { scale: 2, useCORS: true });
+        capturaCarroBase64 = canvasFallback.toDataURL('image/png');
+      }
+    } catch (e) {
+      console.warn('Falha ao capturar modelo 3D:', e);
+    }
+
+    let capturaPaginaBase64 = null;
+    try {
+      const canvasPagina = await html2canvas(document.querySelector('.max-w-5xl'), { scale: 2, useCORS: true });
+      capturaPaginaBase64 = canvasPagina.toDataURL('image/png');
+    } catch (e) {
+      console.warn('Falha ao capturar página:', e);
+    }
+
+    return { capturaCarroBase64, capturaPaginaBase64 };
   }
 
   function coletarCabecalho(){
@@ -519,6 +530,17 @@ const pecasPreDefinidas = [
     const checklist   = coletarChecklist();
     const assinaturas = coletarAssinaturas();
     const capturas    = await coletarCapturas();
+    const avariasJson = coletarAvarias();
+
+    // Campo agregador para facilitar consumo (mantendo os campos originais)
+    const imagens = {
+      assinaturas: {
+        clienteBase64: assinaturas.assinaturaClienteBase64 || null,
+        responsavelBase64: assinaturas.assinaturaResponsavelBase64 || null
+      },
+      capturas, // { capturaCarroBase64, capturaPaginaBase64 }
+      avariasBase64: avariasJson.map(a => a.fotoBase64).filter(Boolean)
+    };
 
     return {
       meta: {
@@ -529,10 +551,11 @@ const pecasPreDefinidas = [
       cabecalho,
       combustivel,
       checklist,
-      avarias: coletarAvarias(),
+      avarias: avariasJson,
       assinaturas,
       capturas,
-      pecasPreDefinidas
+      pecasPreDefinidas,
+      imagens // agregado
     };
   }
 
@@ -675,7 +698,6 @@ const pecasPreDefinidas = [
     doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
     doc.text('Assinaturas', margem, y); y += 6;
 
-    // fundo branco
     doc.setFillColor(255,255,255);
     doc.rect(margem, y, wAss, hAss, 'F');
     doc.rect(210 - margem - wAss, y, wAss, hAss, 'F');
@@ -701,7 +723,6 @@ const pecasPreDefinidas = [
       doc.text(`Página ${i} de ${total}`, 210 - margem, 297 - 8, { align: 'right' });
     }
 
-    // Nome do arquivo
     const placa = document.getElementById('veic_placa')?.value || 'veiculo';
     const dataBR = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
     doc.save(`checklist-${placa}-${dataBR}.pdf`);
