@@ -1,11 +1,17 @@
 {
-  "background_color": "#ffffff",
-  "dir": "auto",
-  "display": "standalone",
   "name": "intranet-check-list-app.naayqg.easypanel",
-  "orientation": "any",
-  "scope": "/",
-  "short_name": "intranet-check-list-app.naayqg.easypanel",
+  "short_name": "Checklist 3D",
   "start_url": "/",
-  "theme_color": "#ffffff"
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-256.png", "sizes": "256x256", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-384.png", "sizes": "384x384", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
 }
