@@ -259,18 +259,31 @@
           <!-- Ações (somente na última tela) -->
           <section class="mt-6">
             <div class="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur p-3 sm:p-4 shadow-lg flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
-              <button id="generate-pdf" class="inline-flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-blue-700 active:scale-[.99] shadow-[0_12px_24px_rgba(37,99,235,.25)] transition w-full sm:w-auto">
+              <!-- NOVO: botão só para enviar para a API -->
+              <button id="send-api"
+                class="inline-flex items-center justify-center gap-2 bg-indigo-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-indigo-700 active:scale-[.99] shadow-[0_12px_24px_rgba(79,70,229,.25)] transition w-full sm:w-auto">
+                Salvar no Sistema
+              </button>
+
+              <!-- Já faz POST + PDF -->
+              <button id="generate-pdf"
+                class="inline-flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-blue-700 active:scale-[.99] shadow-[0_12px_24px_rgba(37,99,235,.25)] transition w-full sm:w-auto">
                 Salvar e Gerar PDF
               </button>
 
-              <button id="generate-json" class="inline-flex items-center justify-center gap-2 bg-emerald-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-emerald-700 active:scale-[.99] shadow-[0_12px_24px_rgba(16,185,129,.25)] transition w-full sm:w-auto">
+              <button id="generate-json"
+                class="inline-flex items-center justify-center gap-2 bg-emerald-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-emerald-700 active:scale-[.99] shadow-[0_12px_24px_rgba(16,185,129,.25)] transition w-full sm:w-auto">
                 Gerar JSON
               </button>
 
-              <button onclick="window.location.reload()" class="inline-flex items-center justify-center gap-2 bg-white text-slate-800 font-semibold py-3 px-6 rounded-xl border border-slate-200 hover:bg-slate-50 active:scale-[.99] transition w-full sm:w-auto">
+              <button onclick="window.location.reload()"
+                class="inline-flex items-center justify-center gap-2 bg-white text-slate-800 font-semibold py-3 px-6 rounded-xl border border-slate-200 hover:bg-slate-50 active:scale-[.99] transition w-full sm:w-auto">
                 Limpar Formulário
               </button>
             </div>
+
+            <!-- Status opcional do POST -->
+            <div id="post-status" class="mt-3 text-center text-sm text-slate-500"></div>
           </section>
         </section>
 

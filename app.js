@@ -4,6 +4,11 @@
 const $  = (s, r=document)=>r.querySelector(s);
 const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
 
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+// CONFIG DA API
+const API_URL = "http://localhost:8000/oficina/checklists";
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
 /* ==========================================================
    WIZARD (4 telas)
    ========================================================== */
@@ -11,21 +16,17 @@ const totalTelas = 4;
 let telaAtual = 1;
 
 function atualizarWizardUI() {
-  // Mostra/oculta telas
   $$('.tela').forEach(sec=>{
     const n = Number(sec.dataset.tela);
     sec.classList.toggle('hidden', n !== telaAtual);
   });
-  // Stepper ativo
   $$('.wizard-steps li').forEach(li=>{
     li.classList.toggle('ativo', Number(li.dataset.step) === telaAtual);
   });
-  // Índice e botões
   $('#wizard-indice').textContent = String(telaAtual);
   $('#btn-prev').disabled = (telaAtual === 1);
   $('#btn-next').textContent = (telaAtual === totalTelas) ? 'Finalizar' : 'Próximo →';
 
-  // >>> IMPORTANTE: quando chegar na Tela 4, prepare/redimensione as assinaturas
   if (telaAtual === 4) {
     ensureSignaturesReady();
   }
@@ -38,7 +39,7 @@ function irParaTela(n) {
 
 function proximaTela() {
   if (telaAtual < totalTelas) irParaTela(telaAtual + 1);
-  else window.scrollTo({ top: 0, behavior: 'smooth' }); // Finalizar
+  else window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 function telaAnterior() { irParaTela(telaAtual - 1); }
 
@@ -456,14 +457,13 @@ const pecasPreDefinidas = [
     };
   }
 
-  // >>>>>>> CAPTURA ROBUSTA do <model-viewer> + fallback
   async function coletarCapturas(){
     let capturaCarroBase64 = null;
     try {
       if (modelo3d && modelo3d.shadowRoot) {
         const glCanvas = modelo3d.shadowRoot.querySelector('canvas');
         if (glCanvas) {
-          capturaCarroBase64 = glCanvas.toDataURL('image/png'); // base64 direto do WebGL
+          capturaCarroBase64 = glCanvas.toDataURL('image/png');
         }
       }
       if (!capturaCarroBase64) {
@@ -532,13 +532,12 @@ const pecasPreDefinidas = [
     const capturas    = await coletarCapturas();
     const avariasJson = coletarAvarias();
 
-    // Campo agregador para facilitar consumo (mantendo os campos originais)
     const imagens = {
       assinaturas: {
         clienteBase64: assinaturas.assinaturaClienteBase64 || null,
         responsavelBase64: assinaturas.assinaturaResponsavelBase64 || null
       },
-      capturas, // { capturaCarroBase64, capturaPaginaBase64 }
+      capturas,
       avariasBase64: avariasJson.map(a => a.fotoBase64).filter(Boolean)
     };
 
@@ -555,11 +554,77 @@ const pecasPreDefinidas = [
       assinaturas,
       capturas,
       pecasPreDefinidas,
-      imagens // agregado
+      imagens
     };
   }
 
-  // Botão: Gerar JSON
+  // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+  // MONTAR PAYLOAD PARA API (remove pecasPreDefinidas)
+  async function montarPayloadParaApi() {
+    const dados = await montarChecklistJson();
+
+    // Tira pecasPreDefinidas do payload da API
+    const { pecasPreDefinidas: _remove, ...payload } = dados;
+
+    // OPCIONAL: se quiser enviar leve (sem imagens/capturas/meta), descomente:
+    // delete payload.meta;
+    // delete payload.capturas;
+    // delete payload.imagens;
+
+    // Reorganiza para o DTO do backend (flatten)
+    const cab = payload.cabecalho || {};
+    const bodyApi = {
+      osInterna: cab.osInterna || null,
+      dataHoraEntrada: cab.dataHoraEntrada || null,
+      observacoes: cab.observacoes || null,
+      combustivelPercentual: (payload.combustivel?.combustivelPercentual ?? 0),
+
+      cliente: cab.cliente || null,
+      veiculo: cab.veiculo || null,
+
+      checklist: payload.checklist || [],
+      // Converte pos/normal 3D para os campos simples do DTO (service converte se aceitar obj)
+      avarias: (payload.avarias || []).map(a => ({
+        tipo: a.tipo,
+        peca: a.peca,
+        observacoes: a.observacoes,
+        posX: a.posicao3d?.x, posY: a.posicao3d?.y, posZ: a.posicao3d?.z,
+        normX: a.normal3d?.x,  normY: a.normal3d?.y,  normZ: a.normal3d?.z,
+        fotoBase64: a.fotoBase64,
+        timestamp: a.timestamp
+      })),
+
+      assinaturaClienteBase64: payload.assinaturas?.assinaturaClienteBase64 || null,
+      assinaturaResponsavelBase64: payload.assinaturas?.assinaturaResponsavelBase64 || null,
+
+      capturaCarroBase64: payload.capturas?.capturaCarroBase64 || null,
+      capturaPaginaBase64: payload.capturas?.capturaPaginaBase64 || null
+    };
+
+    return bodyApi;
+  }
+
+  async function enviarParaApi() {
+    const body = await montarPayloadParaApi();
+
+    const resp = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+        // 'x-app-token': '...' // se usar token
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!resp.ok) {
+      const texto = await resp.text().catch(()=> '');
+      throw new Error(`Falha API (${resp.status}): ${texto || 'sem detalhes'}`);
+    }
+    return resp.json().catch(()=> ({}));
+  }
+  // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+  // Botão: Gerar JSON (download local)
   botaoGerarJson?.addEventListener('click', async ()=>{
     try{
       botaoGerarJson.textContent = 'Gerando...';
@@ -595,7 +660,6 @@ const pecasPreDefinidas = [
     const margem = 12;
     let y = margem;
 
-    // Cabeçalho
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(14);
     doc.text('Checklist de Entrada de Veículo – 3D', margem, y);
@@ -607,7 +671,6 @@ const pecasPreDefinidas = [
     doc.line(margem, y, 210 - margem, y);
     y += 6;
 
-    // Identificação
     const cab = payload.cabecalho || {};
     doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
     doc.text('Identificação', margem, y); y += 6; doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
@@ -631,13 +694,11 @@ const pecasPreDefinidas = [
     doc.text(`KM: ${numeroOuVazio(cab.veiculo?.km) || '-'}`, 110, y);
     y += 8;
 
-    // Combustível
     doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
     doc.text('Nível de Combustível', margem, y); y += 6; doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
     doc.text(`Percentual: ${payload.combustivel?.combustivelPercentual ?? 0}%`, margem, y);
     y += 8;
 
-    // Checklist (tabela)
     const linhasChecklist = (payload.checklist || []).map(i => [i.item || '', i.status || '']);
     doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
     doc.text('Checklist de Itens', margem, y); y += 2;
@@ -652,7 +713,6 @@ const pecasPreDefinidas = [
     });
     y = doc.lastAutoTable.finalY + 8;
 
-    // Avarias (tabela)
     const linhasAvarias = (payload.avarias || []).map(d => [
       d.peca || '',
       d.tipo || '',
@@ -682,7 +742,6 @@ const pecasPreDefinidas = [
     });
     y = doc.lastAutoTable.finalY + 8;
 
-    // Observações
     if (payload.cabecalho?.observacoes) {
       doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
       doc.text('Observações', margem, y); y += 6; doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
@@ -692,7 +751,6 @@ const pecasPreDefinidas = [
       y += (obs.length * 5) + 6;
     }
 
-    // Assinaturas
     const ass = payload.assinaturas || {};
     const wAss = 80, hAss = 30;
     doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
@@ -714,7 +772,6 @@ const pecasPreDefinidas = [
     }
     y += hAss + 14;
 
-    // Rodapé com paginação
     const total = doc.internal.getNumberOfPages();
     for (let i = 1; i <= total; i++) {
       doc.setPage(i);
@@ -728,17 +785,23 @@ const pecasPreDefinidas = [
     doc.save(`checklist-${placa}-${dataBR}.pdf`);
   }
 
-  // Botão: Gerar PDF (via dados)
+  // Botão: Gerar PDF (ENVIA PARA API antes de gerar)
   botaoGerarPdf?.addEventListener('click', async ()=>{
     try{
-      botaoGerarPdf.textContent = 'Gerando...';
+      botaoGerarPdf.textContent = 'Enviando...';
       botaoGerarPdf.disabled = true;
 
+      const resposta = await enviarParaApi();
+      console.log('Checklist salvo na API:', resposta);
+
+      botaoGerarPdf.textContent = 'Gerando PDF...';
       const dados = await montarChecklistJson();
       await gerarPdfComDados(dados);
+
+      alert('Checklist salvo e PDF gerado com sucesso!');
     } catch(err){
       console.error(err);
-      alert('Falha ao gerar PDF.');
+      alert('Falha ao salvar na API: ' + err.message);
     } finally {
       botaoGerarPdf.textContent = 'Salvar e Gerar PDF';
       botaoGerarPdf.disabled = false;
