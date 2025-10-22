@@ -631,53 +631,76 @@ const pecasPreDefinidas = [
   async function montarPayloadParaApi() {
     const dados = await montarChecklistJson();
 
-    // remove pecasPreDefinidas do que vai para API
+    // remove pecasPreDefinidas do que vai para API (se existir na estrutura)
     const { pecasPreDefinidas: _remove, ...payload } = dados;
 
     const cab = payload.cabecalho || {};
+    const cli = cab.cliente || {};
+    const vei = cab.veiculo || {};
+
+    // normaliza KM para número ou null
+    const kmVal = (Number.isFinite(vei.km) ? vei.km : null);
+
+    // normaliza data para ISO com 'Z' (UTC) se vier no formato do input datetime-local
+    function toIsoZ(s) {
+      if (!s) return null;
+      // Se já veio ISO com Z, mantém
+      if (/Z$/i.test(s)) return s;
+      // Se vier "YYYY-MM-DDTHH:mm" (sem segundos), cria Date e exporta para ISO
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? null : d.toISOString();
+    }
+
     const bodyApi = {
+      // ---- campos de topo (flat), exatamente como a API te mostrou ----
       osInterna: cab.osInterna || null,
-      dataHoraEntrada: cab.dataHoraEntrada || null,
+      dataHoraEntrada: toIsoZ(cab.dataHoraEntrada) || null,
       observacoes: cab.observacoes || null,
       combustivelPercentual: (payload.combustivel?.combustivelPercentual ?? 0),
 
-      cliente: cab.cliente || null,
-      veiculo: cab.veiculo || null, // km já está number|null
+      clienteNome: cli.nome || null,
+      clienteDoc:  cli.doc  || null,
+      clienteTel:  cli.tel  || null,
+      clienteEnd:  cli.end  || null,
 
-      checklist: payload.checklist || [],
+      veiculoNome:  vei.nome  || null,
+      veiculoPlaca: vei.placa || null,
+      veiculoCor:   vei.cor   || null,
+      veiculoKm:    kmVal, // número ou null
+
+      checklist: (payload.checklist || []).map(i => ({
+        item:   i.item || '',
+        status: i.status || ''
+      })),
 
       avarias: (payload.avarias || []).map(a => ({
         tipo: a.tipo,
         peca: a.peca,
         observacoes: a.observacoes,
-        posX: a.posicao3d?.x, posY: a.posicao3d?.y, posZ: a.posicao3d?.z,
-        normX: a.normal3d?.x,  normY: a.normal3d?.y,  normZ: a.normal3d?.z,
-        fotoBase64: a.fotoBase64,
+        posX: a.posicao3d?.x,
+        posY: a.posicao3d?.y,
+        posZ: a.posicao3d?.z,
+        normX: a.normal3d?.x,
+        normY: a.normal3d?.y,
+        normZ: a.normal3d?.z,
+        fotoBase64: a.fotoBase64 || null,
         timestamp: a.timestamp
       })),
 
-      assinaturaClienteBase64: payload.assinaturas?.assinaturaClienteBase64 || null,
-      assinaturaResponsavelBase64: payload.assinaturas?.assinaturaResponsavelBase64 || null,
-
-      capturaCarroBase64: payload.capturas?.capturaCarroBase64 || null,
-      capturaPaginaBase64: payload.capturas?.capturaPaginaBase64 || null
+      // >>> nomes das assinaturas exatamente como a API pediu <<<
+      assinaturasclienteBase64: payload.assinaturas?.assinaturaClienteBase64 || null,
+      assinaturasresponsavelBase64: payload.assinaturas?.assinaturaResponsavelBase64 || null,
     };
 
     // ====== COMPACTAÇÃO DE IMAGENS ======
     // Assinaturas
-    if (bodyApi.assinaturaClienteBase64) {
-      bodyApi.assinaturaClienteBase64 = await compressDataUrl(bodyApi.assinaturaClienteBase64, 1000, 400, 0.7);
+    if (bodyApi.assinaturasclienteBase64) {
+      bodyApi.assinaturasclienteBase64 =
+        await compressDataUrl(bodyApi.assinaturasclienteBase64, 1000, 400, 0.7);
     }
-    if (bodyApi.assinaturaResponsavelBase64) {
-      bodyApi.assinaturaResponsavelBase64 = await compressDataUrl(bodyApi.assinaturaResponsavelBase64, 1000, 400, 0.7);
-    }
-
-    // Capturas
-    if (bodyApi.capturaCarroBase64) {
-      bodyApi.capturaCarroBase64 = await compressDataUrl(bodyApi.capturaCarroBase64, 1280, 1280, 0.65);
-    }
-    if (bodyApi.capturaPaginaBase64) {
-      bodyApi.capturaPaginaBase64 = await compressDataUrl(bodyApi.capturaPaginaBase64, 1280, 1280, 0.6);
+    if (bodyApi.assinaturasresponsavelBase64) {
+      bodyApi.assinaturasresponsavelBase64 =
+        await compressDataUrl(bodyApi.assinaturasresponsavelBase64, 1000, 400, 0.7);
     }
 
     // Fotos das avarias
@@ -687,24 +710,23 @@ const pecasPreDefinidas = [
       }
     }
 
-    // ====== LIMITE DE TAMANHO & FALLBACK ======
+    // Remova campos que sua API não conhece (capturas etc.)
+    // (Se sua API aceitar, você pode enviar. Pelo payload que você mostrou, NÃO tem esses campos.)
+    // // bodyApi.capturaCarroBase64 = ...
+    // // bodyApi.capturaPaginaBase64 = ...
+
+    // ====== LIMITE DE TAMANHO (se quiser manter um "soft cap") ======
     const MAX_BYTES_SOFT = 8 * 1024 * 1024; // ~8MB
     let bodyStr = JSON.stringify(bodyApi);
     if (approxByteLength(bodyStr) > MAX_BYTES_SOFT) {
-      delete bodyApi.capturaPaginaBase64;
-      bodyStr = JSON.stringify(bodyApi);
-    }
-    if (approxByteLength(bodyStr) > MAX_BYTES_SOFT) {
-      delete bodyApi.capturaCarroBase64;
-      bodyStr = JSON.stringify(bodyApi);
-    }
-    if (approxByteLength(bodyStr) > MAX_BYTES_SOFT) {
+      // primeiro tira fotos das avarias
       bodyApi.avarias.forEach(a => delete a.fotoBase64);
       bodyStr = JSON.stringify(bodyApi);
     }
 
     return bodyApi;
   }
+
 
   /* ==========================================================
      Botão: Gerar JSON (download local)
