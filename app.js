@@ -4,7 +4,7 @@
 const $  = (s, r=document)=>r.querySelector(s);
 const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
 
-/* ========== Config API ========== */
+/* ========== Config API (mesma origem via proxy) ========== */
 const API_URL = "https://intranetbackend.acacessorios.local/oficina/checklists";
 
 /* ===== Helpers de tamanho/compactação ===== */
@@ -710,12 +710,7 @@ const pecasPreDefinidas = [
       }
     }
 
-    // Remova campos que sua API não conhece (capturas etc.)
-    // (Se sua API aceitar, você pode enviar. Pelo payload que você mostrou, NÃO tem esses campos.)
-    // // bodyApi.capturaCarroBase64 = ...
-    // // bodyApi.capturaPaginaBase64 = ...
-
-    // ====== LIMITE DE TAMANHO (se quiser manter um "soft cap") ======
+    // ====== LIMITE DE TAMANHO (soft cap) ======
     const MAX_BYTES_SOFT = 8 * 1024 * 1024; // ~8MB
     let bodyStr = JSON.stringify(bodyApi);
     if (approxByteLength(bodyStr) > MAX_BYTES_SOFT) {
@@ -726,7 +721,6 @@ const pecasPreDefinidas = [
 
     return bodyApi;
   }
-
 
   /* ==========================================================
      Botão: Gerar JSON (download local)
@@ -960,6 +954,52 @@ const pecasPreDefinidas = [
   });
 
   /* ==========================================================
+     Helper de POST com timeout e erro legível (mobile friendly)
+     ========================================================== */
+  async function postJson(url, body, { timeoutMs = 20000 } = {}) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+        // credentials: 'include', // habilite se precisar enviar cookies
+      });
+
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '');
+        throw new Error(`HTTP ${resp.status} – ${text || resp.statusText}`);
+      }
+      // Tenta ler JSON; se não vier JSON, retorna corpo vazio
+      return await resp.json().catch(() => ({}));
+    } catch (err) {
+      const online = navigator.onLine;
+      const httpsPage = location.protocol === 'https:';
+      const httpsApi  = url.startsWith('https://');
+
+      let dica = '';
+      if (!online) {
+        dica = 'Sem conexão com a internet.';
+      } else if (err.name === 'AbortError') {
+        dica = 'Conexão lenta ou servidor não respondeu (timeout).';
+      } else if (httpsPage && !httpsApi) {
+        dica = 'Bloqueio por conteúdo não seguro (API em HTTP).';
+      } else if (url.includes('.local')) {
+        dica = 'Host .local não resolvido no celular (DNS/mDNS).';
+      } else {
+        dica = 'Possível CORS ou certificado TLS não confiável.';
+      }
+
+      throw new Error(`Falha no fetch: ${dica} (${err.message})`);
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
+  /* ==========================================================
      POST para a API (se existir o botão #send-api)
      ========================================================== */
   botaoSendApi?.addEventListener('click', async ()=>{
@@ -971,24 +1011,17 @@ const pecasPreDefinidas = [
 
       const body = await montarPayloadParaApi();
 
-      const resp = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-
-      if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(`Falha API (${resp.status}): ${text}`);
-      }
+      // Usa helper com timeout + mensagens de erro amigáveis
+      await postJson(API_URL, body, { timeoutMs: 20000 });
 
       if (statusPost) statusPost.textContent = 'Checklist salvo com sucesso!';
       botaoSendApi.textContent = 'Salvo ✅';
       setTimeout(()=> botaoSendApi.textContent = labelOrig, 2000);
     } catch (e) {
       console.error(e);
-      if (statusPost) statusPost.textContent = 'Falha ao salvar: ' + e.message;
-      alert('Falha ao salvar: ' + e.message);
+      const msg = String(e?.message || e);
+      if (statusPost) statusPost.textContent = msg;
+      alert(msg);
       botaoSendApi.textContent = 'Salvar no Sistema';
     } finally {
       botaoSendApi.disabled = false;
