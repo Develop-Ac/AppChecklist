@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Checklist Digital – 3D (Wizard)</title>
+  <title>Checklist Digital – AC</title>
 
   <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -34,18 +34,17 @@
         <div class="flex items-center justify-center gap-4 mb-4">
           <img src="https://i.imgur.com/ijnRbkK.png" alt="Logo" class="h-14 w-auto opacity-90">
           <div>
-            <h1 class="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight">Checklist de Entrada de Veículo – 3D</h1>
-            <p class="text-slate-500">Clique nos pinos azuis para registrar avarias.</p>
+            <h1 class="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight">Checklist de Entrada de Veículo – AC</h1>
           </div>
         </div>
 
         <!-- Stepper / Progresso -->
         <nav class="wizard mt-2">
-          <ol class="wizard-steps">
-            <li data-step="1" class="ativo">Dados</li>
-            <li data-step="2">Inspeção</li>
-            <li data-step="3">Checklist</li>
-            <li data-step="4">Observações</li>
+          <ol class="wizard-steps grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <li data-step="1" class="ativo text-center py-2 rounded-lg border">Dados</li>
+            <li data-step="2" class="text-center py-2 rounded-lg border">Inspeção</li>
+            <li data-step="3" class="text-center py-2 rounded-lg border">Checklist</li>
+            <li data-step="4" class="text-center py-2 rounded-lg border">Observações</li>
           </ol>
         </nav>
       </header>
@@ -87,11 +86,11 @@
                     <label class="fl-label" for="cli_nome">Nome do Cliente</label>
                   </div>
                   <div class="fl-group col-span-2">
-                    <input class="fl-input" placeholder=" " type="text" id="cli_doc">
+                    <input class="fl-input text-gray-800 focus:ring-blue-500" placeholder=" " type="text" id="cli_doc" maxlength="18">
                     <label class="fl-label" for="cli_doc">CPF/CNPJ</label>
                   </div>
                   <div class="fl-group col-span-2">
-                    <input class="fl-input" placeholder=" " type="tel" id="cli_tel">
+                    <input class="fl-input text-gray-800 focus:ring-blue-500" placeholder=" " type="tel" id="cli_tel" maxlength="15">
                     <label class="fl-label" for="cli_tel">Telefone</label>
                   </div>
                   <div class="fl-group col-span-2">
@@ -262,18 +261,7 @@
               <!-- NOVO: botão só para enviar para a API -->
               <button id="send-api"
                 class="inline-flex items-center justify-center gap-2 bg-indigo-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-indigo-700 active:scale-[.99] shadow-[0_12px_24px_rgba(79,70,229,.25)] transition w-full sm:w-auto">
-                Salvar no Sistema
-              </button>
-
-              <!-- Já faz POST + PDF -->
-              <button id="generate-pdf"
-                class="inline-flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-blue-700 active:scale-[.99] shadow-[0_12px_24px_rgba(37,99,235,.25)] transition w-full sm:w-auto">
-                Salvar e Gerar PDF
-              </button>
-
-              <button id="generate-json"
-                class="inline-flex items-center justify-center gap-2 bg-emerald-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-emerald-700 active:scale-[.99] shadow-[0_12px_24px_rgba(16,185,129,.25)] transition w-full sm:w-auto">
-                Gerar JSON
+                Finalizar
               </button>
 
               <button onclick="window.location.reload()"
@@ -298,8 +286,8 @@
   </div>
 
   <!-- ---------- Modal de Avaria ---------- -->
-  <dialog id="damage-modal" class="p-0 rounded-2xl overflow-hidden border border-slate-200 w-full max-w-md">
-    <div class="bg-gradient-to-br from-white to-slate-50 p-5 border-b border-slate-200">
+  <dialog id="damage-modal" class="p-0 rounded-2xl overflow-hidden border border-slate-200 w-full max-w-md 
+          max-h-[90vh] overflow-y-auto"> <div class="bg-gradient-to-br from-white to-slate-50 p-5 border-b border-slate-200">
       <h3 id="modal-title" class="text-lg font-bold text-slate-800">Adicionar Avaria</h3>
     </div>
 
@@ -352,5 +340,123 @@
 
   <!-- Lógica do app -->
   <script src="app.js"></script>
+
+<script>
+        const inputDoc = document.getElementById('cli_doc');
+        const inputTel = document.getElementById('cli_tel'); // NOVO INPUT
+        const feedback = document.getElementById('feedback');
+
+        // =========================================================
+        // FUNÇÃO DE MÁSCARA CPF/CNPJ (CORRIGIDA)
+        // =========================================================
+        function maskCPFCNPJ(value) {
+            let v = value.replace(/\D/g, ''); // 1. Remove tudo que não for dígito
+            const length = v.length;
+            let maskedValue;
+
+            if (length <= 11) {
+                // Máscara CPF: 999.999.999-99 (14 caracteres)
+                
+                // Aplica formatação sequencialmente
+                v = v.replace(/(\d{3})(\d)/, '$1.$2');       
+                v = v.replace(/(\d{3})\.(\d{3})(\d)/, '$1.$2.$3'); 
+                v = v.replace(/(\d{3})\.(\d{3})\.(\d{3})(\d{1,2})$/, '$1-$2'); 
+                
+                maskedValue = v;
+                
+                feedback.textContent = length === 11 ? 'Formato: CPF' : '';
+            } else {
+                // Máscara CNPJ: 99.999.999/9999-99 (18 caracteres)
+                
+                // Aplica formatação sequencialmente
+                v = v.replace(/^(\d{2})(\d)/, '$1.$2');       
+                v = v.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3'); 
+                v = v.replace(/\.(\d{3})(\d)/, '.$1/$2');     
+                v = v.replace(/(\d{4})(\d{1,2})$/, '$1-$2'); 
+
+                maskedValue = v;
+                
+                feedback.textContent = length === 14 ? 'Formato: CNPJ' : '';
+            }
+
+            // Limita o tamanho máximo de caracteres
+            const maxLength = length <= 11 ? 14 : 18;
+            return maskedValue.slice(0, maxLength);
+        }
+
+        // =========================================================
+        // FUNÇÃO DE MÁSCARA TELEFONE (CORRIGIDA)
+        // =========================================================
+        function maskPhone(value) {
+            const cleanValue = value.replace(/\D/g, ''); // Remove tudo que não for dígito
+            let maskedValue = cleanValue;
+            
+            const length = cleanValue.length;
+
+            if (length > 10) {
+                // Padrão 11 dígitos (Celular): (XX) XXXXX-XXXX (15 caracteres)
+                maskedValue = cleanValue
+                    // 1. Completo: (XX) XXXXX-XXXX
+                    .replace(/^(\d{2})(\d{5})(\d{4})$/, '($1) $2-$3')
+                    // 2. Incompleto após o 5º dígito: (XX) XXXXX-XXX
+                    .replace(/^(\d{2})(\d{5})(\d{1,3})$/, '($1) $2-$3') 
+                    // 3. Incompleto após DDD: (XX) XXXXX
+                    .replace(/^(\d{2})(\d{1,5})$/, '($1) $2');          
+
+                return maskedValue.slice(0, 15);
+            } 
+            
+            if (length > 6) {
+                // Padrão 10 dígitos (Fixo/Antigo): (XX) XXXX-XXXX (14 caracteres)
+                maskedValue = cleanValue
+                    // 1. Completo: (XX) XXXX-XXXX
+                    .replace(/^(\d{2})(\d{4})(\d{4})$/, '($1) $2-$3')
+                    // 2. Incompleto após o 4º dígito: (XX) XXXX-XXX
+                    .replace(/^(\d{2})(\d{4})(\d{1,3})$/, '($1) $2-$3') 
+                    // 3. Incompleto após DDD: (XX) XXXX
+                    .replace(/^(\d{2})(\d{1,4})$/, '($1) $2');          
+
+                return maskedValue.slice(0, 14);
+            } 
+            
+            // Apenas DDD ou menos: (XX) X...
+            if (length > 2) {
+                return cleanValue.replace(/^(\d{2})(\d)/g, '($1) $2');
+            }
+            
+            // Apenas (XX
+            if (length > 0) {
+                return cleanValue.replace(/^(\d{2})/, '($1)');
+            }
+            
+            return maskedValue; // Retorna vazio se não houver dígitos
+        }
+
+
+        // =========================================================
+        // LISTENERS
+        // =========================================================
+
+        // Listener para CPF/CNPJ
+        inputDoc.addEventListener('input', (e) => {
+            const maskedValue = maskCPFCNPJ(e.target.value);
+            e.target.value = maskedValue;
+            
+            if (e.target.value === '') {
+                feedback.textContent = '';
+            }
+        });
+
+        // Listener para Telefone
+        inputTel.addEventListener('input', (e) => {
+            const maskedValue = maskPhone(e.target.value);
+            e.target.value = maskedValue;
+        });
+
+        // Inicializa o maxlength correto para CPF/CNPJ e Telefone
+        inputDoc.setAttribute('maxlength', 18); // CNPJ é o maior
+        inputTel.setAttribute('maxlength', 15); // Telefone com 11 dígitos e máscara é (99) 99999-9999
+    </script>
+
 </body>
 </html>
