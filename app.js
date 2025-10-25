@@ -173,7 +173,7 @@ const pecasPreDefinidas = [
       const s = v.toString().trim();
       if (s === '') return null;
       const n = parseInt(s, 10);
-      return Number.isFinite(n) ? n : null;
+      return Number.isFinite(n) ? Math.trunc(n) : null;
     }
     if (typeof v === 'number') {
       return Number.isFinite(v) ? Math.trunc(v) : null;
@@ -375,6 +375,96 @@ const pecasPreDefinidas = [
     reader.readAsDataURL(arquivo);
   });
 
+  /* ==========================================================
+     CÂMERA (getUserMedia) — botão "Tirar foto"
+     ========================================================== */
+  const btnOpenCam   = $('#open-camera');
+  const modalCam     = $('#camera-modal');
+  const btnCloseCam  = $('#close-camera');
+  const btnTakePhoto = $('#take-photo');
+  const btnSwitch    = $('#switch-facing');
+  const video        = $('#camera-video');
+
+  let camStream = null;
+  let facingMode = 'environment'; // traseira por padrão
+
+  async function startCamera() {
+    stopCamera();
+    try {
+      camStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode },
+        audio: false
+      });
+      video.srcObject = camStream;
+    } catch (e) {
+      alert('Não foi possível acessar a câmera: ' + (e?.message || e));
+      stopCamera();
+      modalCam?.close?.();
+    }
+  }
+
+  function stopCamera() {
+    if (camStream) {
+      camStream.getTracks().forEach(t => t.stop());
+      camStream = null;
+    }
+    if (video) video.srcObject = null;
+  }
+
+  btnOpenCam?.addEventListener('click', async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      // fallback: abre o seletor de arquivo
+      entradaFoto?.click?.();
+      return;
+    }
+    modalCam?.showModal?.();
+    await startCamera();
+  });
+
+  btnCloseCam?.addEventListener('click', () => {
+    stopCamera();
+    modalCam?.close?.();
+  });
+
+  btnSwitch?.addEventListener('click', async () => {
+    facingMode = (facingMode === 'environment') ? 'user' : 'environment';
+    await startCamera();
+  });
+
+  btnTakePhoto?.addEventListener('click', async () => {
+    if (!video || !video.videoWidth) return;
+
+    const canvas = document.createElement('canvas');
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0);
+
+    // JPEG (melhor tamanho)
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+
+    // preview
+    if (previsualizacaoFoto) {
+      previsualizacaoFoto.src = dataUrl;
+      previsualizacaoFoto.classList.remove('hidden');
+    }
+
+    // cria File e injeta no input[type=file]
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+    const file = new File([blob], `avaria-${Date.now()}.jpg`, { type: 'image/jpeg' });
+
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    if (entradaFoto) entradaFoto.files = dt.files;
+
+    stopCamera();
+    modalCam?.close?.();
+  });
+
+  /* ==========================================================
+     SUBMIT do formulário de AVARIA
+     ========================================================== */
   formularioAvaria?.addEventListener('submit', (e)=>{
     e.preventDefault();
 
@@ -644,9 +734,7 @@ const pecasPreDefinidas = [
     // normaliza data para ISO com 'Z' (UTC) se vier no formato do input datetime-local
     function toIsoZ(s) {
       if (!s) return null;
-      // Se já veio ISO com Z, mantém
       if (/Z$/i.test(s)) return s;
-      // Se vier "YYYY-MM-DDTHH:mm" (sem segundos), cria Date e exporta para ISO
       const d = new Date(s);
       return isNaN(d.getTime()) ? null : d.toISOString();
     }
@@ -745,23 +833,17 @@ const pecasPreDefinidas = [
 
   /* ==========================================================
      PDF ESTRUTURADO POR DADOS (jsPDF + AutoTable)
-     - Com page break automático
-     - Checklist com 2 itens por linha (4 colunas)
      ========================================================== */
   async function gerarPdfComDados(payload) {
     const doc = new window.jspdf.jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
 
-    // ===== Constantes de página
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
     const margem = 12;
     const contentTop = margem;
     const contentBottom = pageH - margem;
-
-    // ===== Estado de cursor
     let y = margem;
 
-    // ===== Helpers
     function addPageIfNeeded(needed = 0) {
       if (y + needed <= contentBottom) return;
       doc.addPage();
@@ -795,7 +877,6 @@ const pecasPreDefinidas = [
       }
     }
 
-    // ===== Cabeçalho (título + data)
     doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
     textLine('Checklist de Entrada de Veículo – 3D', margem, { lineH: 6 });
     doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
@@ -805,7 +886,6 @@ const pecasPreDefinidas = [
     hr();
     y += 4;
 
-    // ===== Identificação
     const cab = payload.cabecalho || {};
     sectionTitle('Identificação');
 
@@ -824,12 +904,10 @@ const pecasPreDefinidas = [
     twoCols(`Cor: ${cab.veiculo?.cor || '-'}`, `KM: ${Number.isFinite(cab.veiculo?.km) ? String(cab.veiculo.km) : '-'}`);
     y += 2;
 
-    // ===== Combustível
     sectionTitle('Nível de Combustível');
     textLine(`Percentual: ${payload.combustivel?.combustivelPercentual ?? 0}%`, margem, { lineH: 6 });
     y += 2;
 
-    // ===== Checklist (2 itens por linha: Item A/Status A | Item B/Status B)
     sectionTitle('Checklist de Itens');
     const itens = (payload.checklist || []).map(i => [i.item || '', i.status || '']);
     const linhasEmPares = [];
@@ -857,7 +935,6 @@ const pecasPreDefinidas = [
     });
     y = doc.lastAutoTable.finalY + 8;
 
-    // ===== Avarias (AutoTable com quebra automática)
     sectionTitle('Avarias Registradas');
 
     const linhasAvarias = (payload.avarias || []).map(d => [
@@ -889,14 +966,12 @@ const pecasPreDefinidas = [
     });
     y = doc.lastAutoTable.finalY + 8;
 
-    // ===== Observações (texto quebrando em múltiplas páginas)
     if (cab?.observacoes) {
       sectionTitle('Observações');
       addWrappedText(cab.observacoes, pageW - margem * 2);
       y += 4;
     }
 
-    // ===== Assinaturas (com quebra manual se faltar espaço)
     sectionTitle('Assinaturas');
     const ass = payload.assinaturas || {};
     const wAss = 80, hAss = 30, gap = 10;
@@ -921,7 +996,6 @@ const pecasPreDefinidas = [
 
     y += blockH + gap;
 
-    // ===== Rodapé com numeração de páginas
     const total = doc.internal.getNumberOfPages();
     for (let i = 1; i <= total; i++) {
       doc.setPage(i);
@@ -930,7 +1004,6 @@ const pecasPreDefinidas = [
       doc.text(`Página ${i} de ${total}`, pageW - margem, pageH - 8, { align: 'right' });
     }
 
-    // ===== Salvar
     const placa = document.getElementById('veic_placa')?.value || 'veiculo';
     const dataBR = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
     doc.save(`checklist-${placa}-${dataBR}.pdf`);
@@ -966,14 +1039,12 @@ const pecasPreDefinidas = [
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
         signal: ctrl.signal,
-        // credentials: 'include', // habilite se precisar enviar cookies
       });
 
       if (!resp.ok) {
         const text = await resp.text().catch(() => '');
         throw new Error(`HTTP ${resp.status} – ${text || resp.statusText}`);
       }
-      // Tenta ler JSON; se não vier JSON, retorna corpo vazio
       return await resp.json().catch(() => ({}));
     } catch (err) {
       const online = navigator.onLine;
@@ -1010,8 +1081,6 @@ const pecasPreDefinidas = [
       if (statusPost) statusPost.textContent = '';
 
       const body = await montarPayloadParaApi();
-
-      // Usa helper com timeout + mensagens de erro amigáveis
       await postJson(API_URL, body, { timeoutMs: 20000 });
 
       if (statusPost) statusPost.textContent = 'Checklist salvo com sucesso!';

@@ -287,7 +287,8 @@
 
   <!-- ---------- Modal de Avaria ---------- -->
   <dialog id="damage-modal" class="p-0 rounded-2xl overflow-hidden border border-slate-200 w-full max-w-md 
-          max-h-[90vh] overflow-y-auto"> <div class="bg-gradient-to-br from-white to-slate-50 p-5 border-b border-slate-200">
+          max-h-[90vh] overflow-y-auto">
+    <div class="bg-gradient-to-br from-white to-slate-50 p-5 border-b border-slate-200">
       <h3 id="modal-title" class="text-lg font-bold text-slate-800">Adicionar Avaria</h3>
     </div>
 
@@ -326,7 +327,19 @@
       <div>
         <label for="damage-photo" class="block text-sm font-medium text-slate-700 mb-2">Foto</label>
         <div class="flex items-center gap-3">
-          <input type="file" id="damage-photo" accept="image/*" class="file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 nice-select w-full">
+          <!-- IMPORTANTE: accept + capture pede câmera no mobile -->
+          <input
+            type="file"
+            id="damage-photo"
+            accept="image/*"
+            capture="environment"
+            class="file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 nice-select w-full"
+          >
+          <!-- Botão que abre a câmera (modal com getUserMedia) -->
+          <button type="button" id="open-camera"
+                  class="inline-flex items-center justify-center px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">
+            Tirar foto
+          </button>
         </div>
         <img id="photo-preview" class="hidden mt-3 rounded-xl max-h-40 w-auto border border-slate-200 shadow-sm"/>
       </div>
@@ -338,125 +351,110 @@
     </form>
   </dialog>
 
+  <!-- ---------- Modal da Câmera (getUserMedia) ---------- -->
+  <dialog id="camera-modal" class="p-0 rounded-2xl overflow-hidden border border-slate-200 w-full max-w-xl">
+    <div class="bg-white p-4 border-b flex items-center justify-between">
+      <h3 class="text-lg font-semibold">Câmera</h3>
+      <button type="button" id="close-camera" class="h-9 w-9 rounded hover:bg-gray-100">✕</button>
+    </div>
+
+    <div class="p-4 space-y-3">
+      <video id="camera-video" autoplay playsinline class="w-full rounded bg-black"></video>
+      <div class="flex items-center justify-end gap-2">
+        <button type="button" id="switch-facing" class="px-4 py-2 rounded border">Trocar câmera</button>
+        <button type="button" id="take-photo" class="px-4 py-2 rounded bg-blue-600 text-white">Capturar</button>
+      </div>
+    </div>
+  </dialog>
+
   <!-- Lógica do app -->
   <script src="app.js"></script>
 
-<script>
-        const inputDoc = document.getElementById('cli_doc');
-        const inputTel = document.getElementById('cli_tel'); // NOVO INPUT
-        const feedback = document.getElementById('feedback');
+  <script>
+    const inputDoc = document.getElementById('cli_doc');
+    const inputTel = document.getElementById('cli_tel'); // NOVO INPUT
+    const feedback = document.getElementById('feedback');
 
-        // =========================================================
-        // FUNÇÃO DE MÁSCARA CPF/CNPJ (CORRIGIDA)
-        // =========================================================
-        function maskCPFCNPJ(value) {
-            let v = value.replace(/\D/g, ''); // 1. Remove tudo que não for dígito
-            const length = v.length;
-            let maskedValue;
+    // =========================================================
+    // FUNÇÃO DE MÁSCARA CPF/CNPJ (CORRIGIDA)
+    // =========================================================
+    function maskCPFCNPJ(value) {
+      let v = value.replace(/\D/g, ''); // 1. Remove tudo que não for dígito
+      const length = v.length;
+      let maskedValue;
 
-            if (length <= 11) {
-                // Máscara CPF: 999.999.999-99 (14 caracteres)
-                
-                // Aplica formatação sequencialmente
-                v = v.replace(/(\d{3})(\d)/, '$1.$2');       
-                v = v.replace(/(\d{3})\.(\d{3})(\d)/, '$1.$2.$3'); 
-                v = v.replace(/(\d{3})\.(\d{3})\.(\d{3})(\d{1,2})$/, '$1-$2'); 
-                
-                maskedValue = v;
-                
-                feedback.textContent = length === 11 ? 'Formato: CPF' : '';
-            } else {
-                // Máscara CNPJ: 99.999.999/9999-99 (18 caracteres)
-                
-                // Aplica formatação sequencialmente
-                v = v.replace(/^(\d{2})(\d)/, '$1.$2');       
-                v = v.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3'); 
-                v = v.replace(/\.(\d{3})(\d)/, '.$1/$2');     
-                v = v.replace(/(\d{4})(\d{1,2})$/, '$1-$2'); 
+      if (length <= 11) {
+        // Máscara CPF: 999.999.999-99 (14 caracteres)
+        v = v.replace(/(\d{3})(\d)/, '$1.$2');
+        v = v.replace(/(\d{3})\.(\d{3})(\d)/, '$1.$2.$3');
+        v = v.replace(/(\d{3})\.(\d{3})\.(\d{3})(\d{1,2})$/, '$1-$2');
+        maskedValue = v;
+        if (feedback) feedback.textContent = length === 11 ? 'Formato: CPF' : '';
+      } else {
+        // Máscara CNPJ: 99.999.999/9999-99 (18 caracteres)
+        v = v.replace(/^(\d{2})(\d)/, '$1.$2');
+        v = v.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
+        v = v.replace(/\.(\d{3})(\d)/, '.$1/$2');
+        v = v.replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+        maskedValue = v;
+        if (feedback) feedback.textContent = length === 14 ? 'Formato: CNPJ' : '';
+      }
 
-                maskedValue = v;
-                
-                feedback.textContent = length === 14 ? 'Formato: CNPJ' : '';
-            }
+      const maxLength = length <= 11 ? 14 : 18;
+      return maskedValue.slice(0, maxLength);
+    }
 
-            // Limita o tamanho máximo de caracteres
-            const maxLength = length <= 11 ? 14 : 18;
-            return maskedValue.slice(0, maxLength);
+    // =========================================================
+    // FUNÇÃO DE MÁSCARA TELEFONE (CORRIGIDA)
+    // =========================================================
+    function maskPhone(value) {
+      const cleanValue = value.replace(/\D/g, '');
+      let maskedValue = cleanValue;
+      const length = cleanValue.length;
+
+      if (length > 10) {
+        maskedValue = cleanValue
+          .replace(/^(\d{2})(\d{5})(\d{4})$/, '($1) $2-$3')
+          .replace(/^(\d{2})(\d{5})(\d{1,3})$/, '($1) $2-$3')
+          .replace(/^(\d{2})(\d{1,5})$/, '($1) $2');
+        return maskedValue.slice(0, 15);
+      }
+
+      if (length > 6) {
+        maskedValue = cleanValue
+          .replace(/^(\d{2})(\d{4})(\d{4})$/, '($1) $2-$3')
+          .replace(/^(\d{2})(\d{4})(\d{1,3})$/, '($1) $2-$3')
+          .replace(/^(\d{2})(\d{1,4})$/, '($1) $2');
+        return maskedValue.slice(0, 14);
+      }
+
+      if (length > 2) return cleanValue.replace(/^(\d{2})(\d)/g, '($1) $2');
+      if (length > 0) return cleanValue.replace(/^(\d{2})/, '($1)');
+      return maskedValue;
+    }
+
+    // =========================================================
+    // LISTENERS
+    // =========================================================
+    if (inputDoc) {
+      inputDoc.addEventListener('input', (e) => {
+        const maskedValue = maskCPFCNPJ(e.target.value);
+        e.target.value = maskedValue;
+        if (e.target.value === '' && feedback) {
+          feedback.textContent = '';
         }
+      });
+      inputDoc.setAttribute('maxlength', 18);
+    }
 
-        // =========================================================
-        // FUNÇÃO DE MÁSCARA TELEFONE (CORRIGIDA)
-        // =========================================================
-        function maskPhone(value) {
-            const cleanValue = value.replace(/\D/g, ''); // Remove tudo que não for dígito
-            let maskedValue = cleanValue;
-            
-            const length = cleanValue.length;
-
-            if (length > 10) {
-                // Padrão 11 dígitos (Celular): (XX) XXXXX-XXXX (15 caracteres)
-                maskedValue = cleanValue
-                    // 1. Completo: (XX) XXXXX-XXXX
-                    .replace(/^(\d{2})(\d{5})(\d{4})$/, '($1) $2-$3')
-                    // 2. Incompleto após o 5º dígito: (XX) XXXXX-XXX
-                    .replace(/^(\d{2})(\d{5})(\d{1,3})$/, '($1) $2-$3') 
-                    // 3. Incompleto após DDD: (XX) XXXXX
-                    .replace(/^(\d{2})(\d{1,5})$/, '($1) $2');          
-
-                return maskedValue.slice(0, 15);
-            } 
-            
-            if (length > 6) {
-                // Padrão 10 dígitos (Fixo/Antigo): (XX) XXXX-XXXX (14 caracteres)
-                maskedValue = cleanValue
-                    // 1. Completo: (XX) XXXX-XXXX
-                    .replace(/^(\d{2})(\d{4})(\d{4})$/, '($1) $2-$3')
-                    // 2. Incompleto após o 4º dígito: (XX) XXXX-XXX
-                    .replace(/^(\d{2})(\d{4})(\d{1,3})$/, '($1) $2-$3') 
-                    // 3. Incompleto após DDD: (XX) XXXX
-                    .replace(/^(\d{2})(\d{1,4})$/, '($1) $2');          
-
-                return maskedValue.slice(0, 14);
-            } 
-            
-            // Apenas DDD ou menos: (XX) X...
-            if (length > 2) {
-                return cleanValue.replace(/^(\d{2})(\d)/g, '($1) $2');
-            }
-            
-            // Apenas (XX
-            if (length > 0) {
-                return cleanValue.replace(/^(\d{2})/, '($1)');
-            }
-            
-            return maskedValue; // Retorna vazio se não houver dígitos
-        }
-
-
-        // =========================================================
-        // LISTENERS
-        // =========================================================
-
-        // Listener para CPF/CNPJ
-        inputDoc.addEventListener('input', (e) => {
-            const maskedValue = maskCPFCNPJ(e.target.value);
-            e.target.value = maskedValue;
-            
-            if (e.target.value === '') {
-                feedback.textContent = '';
-            }
-        });
-
-        // Listener para Telefone
-        inputTel.addEventListener('input', (e) => {
-            const maskedValue = maskPhone(e.target.value);
-            e.target.value = maskedValue;
-        });
-
-        // Inicializa o maxlength correto para CPF/CNPJ e Telefone
-        inputDoc.setAttribute('maxlength', 18); // CNPJ é o maior
-        inputTel.setAttribute('maxlength', 15); // Telefone com 11 dígitos e máscara é (99) 99999-9999
-    </script>
+    if (inputTel) {
+      inputTel.addEventListener('input', (e) => {
+        const maskedValue = maskPhone(e.target.value);
+        e.target.value = maskedValue;
+      });
+      inputTel.setAttribute('maxlength', 15);
+    }
+  </script>
 
 </body>
 </html>
