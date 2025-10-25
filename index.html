@@ -44,7 +44,7 @@
             <li data-step="1" class="ativo text-center py-2 rounded-lg border">Dados</li>
             <li data-step="2" class="text-center py-2 rounded-lg border">Inspeção</li>
             <li data-step="3" class="text-center py-2 rounded-lg border">Checklist</li>
-            <li data-step="4" class="text-center py-2 rounded-lg border">Observações</li>
+            <li data-step="4" class="text-center py-2 rounded-lg border">Assinatura</li>
           </ol>
         </nav>
       </header>
@@ -213,7 +213,7 @@
           </div>
         </section>
 
-        <!-- === TELA 3: Checklist === -->
+        <!-- === TELA 3: Checklist + Observações === -->
         <section class="tela hidden" data-tela="3">
           <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
             <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
@@ -221,23 +221,34 @@
               Checklist de Itens
             </h2>
             <div id="items-checklist" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+
+            <!-- Observações (movidas para a TELA 3) -->
+            <div class="mt-6">
+              <h3 class="text-base font-semibold text-slate-800 mb-2 flex items-center gap-2">
+                <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-pink-50 text-pink-600 text-xs">📝</span>
+                Observações
+              </h3>
+              <div class="fl-group">
+                <textarea id="obs" class="fl-input min-h-[110px]" placeholder=" "></textarea>
+                <label class="fl-label" for="obs">Demais observações</label>
+              </div>
+            </div>
           </div>
         </section>
 
-        <!-- === TELA 4: Observações e Assinaturas === -->
+        <!-- === TELA 4: Resumo + Assinaturas === -->
         <section class="tela hidden" data-tela="4">
           <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
             <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
-              <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-pink-50 text-pink-600 text-xs">📝</span>
-              Observações e Assinaturas
+              <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 text-xs">🔎</span>
+              Resumo & Assinaturas
             </h2>
 
-            <div class="fl-group mb-6">
-              <textarea id="obs" class="fl-input min-h-[110px]" placeholder=" "></textarea>
-              <label class="fl-label" for="obs">Demais observações</label>
-            </div>
+            <!-- Resumo preenchido via JS ao entrar na Tela 4 -->
+            <div id="summary-content" class="space-y-6"></div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- Assinaturas -->
+            <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-8">
               <div>
                 <label class="block mb-2 font-medium text-slate-700">Assinatura do Cliente</label>
                 <div class="rounded-xl border border-slate-200 bg-white/60 p-3">
@@ -258,7 +269,6 @@
           <!-- Ações (somente na última tela) -->
           <section class="mt-6">
             <div class="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur p-3 sm:p-4 shadow-lg flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
-              <!-- NOVO: botão só para enviar para a API -->
               <button id="send-api"
                 class="inline-flex items-center justify-center gap-2 bg-indigo-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-indigo-700 active:scale-[.99] shadow-[0_12px_24px_rgba(79,70,229,.25)] transition w-full sm:w-auto">
                 Finalizar
@@ -270,7 +280,6 @@
               </button>
             </div>
 
-            <!-- Status opcional do POST -->
             <div id="post-status" class="mt-3 text-center text-sm text-slate-500"></div>
           </section>
         </section>
@@ -327,7 +336,6 @@
       <div>
         <label for="damage-photo" class="block text-sm font-medium text-slate-700 mb-2">Foto</label>
         <div class="flex items-center gap-3">
-          <!-- IMPORTANTE: accept + capture pede câmera no mobile -->
           <input
             type="file"
             id="damage-photo"
@@ -335,7 +343,6 @@
             capture="environment"
             class="file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 nice-select w-full"
           >
-          <!-- Botão que abre a câmera (modal com getUserMedia) -->
           <button type="button" id="open-camera"
                   class="inline-flex items-center justify-center px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">
             Tirar foto
@@ -372,41 +379,20 @@
 
   <script>
     const inputDoc = document.getElementById('cli_doc');
-    const inputTel = document.getElementById('cli_tel'); // NOVO INPUT
-    const feedback = document.getElementById('feedback');
+    const inputTel = document.getElementById('cli_tel');
 
-    // =========================================================
-    // FUNÇÃO DE MÁSCARA CPF/CNPJ (CORRIGIDA)
-    // =========================================================
-    function maskCPFCNPJ(value) {
-      let v = value.replace(/\D/g, ''); // 1. Remove tudo que não for dígito
-      const length = v.length;
-      let maskedValue;
-
-      if (length <= 11) {
-        // Máscara CPF: 999.999.999-99 (14 caracteres)
-        v = v.replace(/(\d{3})(\d)/, '$1.$2');
-        v = v.replace(/(\d{3})\.(\d{3})(\d)/, '$1.$2.$3');
-        v = v.replace(/(\d{3})\.(\d{3})\.(\d{3})(\d{1,2})$/, '$1-$2');
-        maskedValue = v;
-        if (feedback) feedback.textContent = length === 11 ? 'Formato: CPF' : '';
-      } else {
-        // Máscara CNPJ: 99.999.999/9999-99 (18 caracteres)
-        v = v.replace(/^(\d{2})(\d)/, '$1.$2');
-        v = v.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
-        v = v.replace(/\.(\d{3})(\d)/, '.$1/$2');
-        v = v.replace(/(\d{4})(\d{1,2})$/, '$1-$2');
-        maskedValue = v;
-        if (feedback) feedback.textContent = length === 14 ? 'Formato: CNPJ' : '';
-      }
-
-      const maxLength = length <= 11 ? 14 : 18;
-      return maskedValue.slice(0, maxLength);
+    // Campo CPF/CNPJ: apenas dígitos, sem máscara visual.
+    // Limita até 14 caracteres (CNPJ). Se preferir limitar a 11, mude para 11.
+    if (inputDoc) {
+      inputDoc.addEventListener('input', (e) => {
+        // remove tudo que não for dígito e corta no máximo 14 caracteres
+        e.target.value = e.target.value.replace(/\D/g, '').slice(0, 14);
+      });
+      // opcional: define maxlength no próprio input (apenas UI)
+      inputDoc.setAttribute('maxlength', 14);
     }
 
-    // =========================================================
-    // FUNÇÃO DE MÁSCARA TELEFONE (CORRIGIDA)
-    // =========================================================
+    // Mantém máscara do telefone (se quiser remover também, apague este bloco)
     function maskPhone(value) {
       const cleanValue = value.replace(/\D/g, '');
       let maskedValue = cleanValue;
@@ -419,7 +405,6 @@
           .replace(/^(\d{2})(\d{1,5})$/, '($1) $2');
         return maskedValue.slice(0, 15);
       }
-
       if (length > 6) {
         maskedValue = cleanValue
           .replace(/^(\d{2})(\d{4})(\d{4})$/, '($1) $2-$3')
@@ -427,24 +412,9 @@
           .replace(/^(\d{2})(\d{1,4})$/, '($1) $2');
         return maskedValue.slice(0, 14);
       }
-
       if (length > 2) return cleanValue.replace(/^(\d{2})(\d)/g, '($1) $2');
       if (length > 0) return cleanValue.replace(/^(\d{2})/, '($1)');
       return maskedValue;
-    }
-
-    // =========================================================
-    // LISTENERS
-    // =========================================================
-    if (inputDoc) {
-      inputDoc.addEventListener('input', (e) => {
-        const maskedValue = maskCPFCNPJ(e.target.value);
-        e.target.value = maskedValue;
-        if (e.target.value === '' && feedback) {
-          feedback.textContent = '';
-        }
-      });
-      inputDoc.setAttribute('maxlength', 18);
     }
 
     if (inputTel) {

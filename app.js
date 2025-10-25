@@ -31,7 +31,7 @@ async function compressDataUrl(dataUrl, maxW = 1280, maxH = 1280, quality = 0.65
   if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image')) return dataUrl;
 
   const bytes = approxByteLength(dataUrl);
-  if (bytes < 200 * 1024) return dataUrl; // já é pequeno
+  if (bytes < 200 * 1024) return dataUrl;
 
   const img = await dataURLToImage(dataUrl);
   if (!img) return dataUrl;
@@ -47,7 +47,6 @@ async function compressDataUrl(dataUrl, maxW = 1280, maxH = 1280, quality = 0.65
   const ctx = canvas.getContext('2d');
   ctx.drawImage(img, 0, 0, targetW, targetH);
 
-  // Re-exporta como JPEG
   const out = canvas.toDataURL('image/jpeg', quality);
   return out;
 }
@@ -73,9 +72,10 @@ function atualizarWizardUI() {
   $('#btn-prev').disabled = (telaAtual === 1);
   $('#btn-next').textContent = (telaAtual === totalTelas) ? 'Finalizar' : 'Próximo →';
 
-  // >>> IMPORTANTE: quando chegar na Tela 4, prepare/redimensione as assinaturas
+  // Ao entrar na Tela 4: preparar assinaturas e renderizar resumo
   if (telaAtual === 4) {
-    ensureSignaturesReady();
+    window.ensureSignaturesReady?.();
+    window.renderResumo?.();
   }
 }
 
@@ -129,7 +129,7 @@ const pecasPreDefinidas = [
 (function iniciarApp(){
   const { jsPDF } = window.jspdf;
 
-  /* ---------- Cache de elementos ---------- */
+  /* ---------- Cache de elementos (UMA única vez) ---------- */
   const modelo3d           = $('#car3d');
   const statusModelo       = $('#model-status');
   const listaAvarias       = $('#damages-list');
@@ -146,9 +146,8 @@ const pecasPreDefinidas = [
   const botaoGerarPdf      = $('#generate-pdf');
   const botaoGerarJson     = $('#generate-json');
 
-  // Botões e status opcionais para API (adicione no HTML se quiser)
-  const botaoSendApi       = $('#send-api');       // <button id="send-api">
-  const statusPost         = $('#post-status');    // <div id="post-status">
+  const botaoSendApi       = $('#send-api');
+  const statusPost         = $('#post-status');
 
   // Estado das avarias
   /** @type {{pos3d:{x:number,y:number,z:number}, norm3d:{x:number,y:number,z:number}, type:string, part:string, notes:string, photo?:string, timestamp:number}[]} */
@@ -166,7 +165,6 @@ const pecasPreDefinidas = [
   };
   const pegarValorInput = (id)=> (document.getElementById(id)?.value ?? '').trim();
 
-  // Converte string/number para int ou null
   function toIntOrNull(v) {
     if (v === undefined || v === null) return null;
     if (typeof v === 'string') {
@@ -279,9 +277,9 @@ const pecasPreDefinidas = [
     sizeCanvas(document.getElementById('inspector-signature'));
   };
 
-  if (telaAtual === 4) ensureSignaturesReady();
+  if (telaAtual === 4) window.ensureSignaturesReady();
   window.addEventListener('resize', ()=> {
-    if (telaAtual === 4) ensureSignaturesReady();
+    if (telaAtual === 4) window.ensureSignaturesReady();
   });
 })();
 
@@ -386,7 +384,7 @@ const pecasPreDefinidas = [
   const video        = $('#camera-video');
 
   let camStream = null;
-  let facingMode = 'environment'; // traseira por padrão
+  let facingMode = 'environment';
 
   async function startCamera() {
     stopCamera();
@@ -413,7 +411,6 @@ const pecasPreDefinidas = [
 
   btnOpenCam?.addEventListener('click', async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
-      // fallback: abre o seletor de arquivo
       entradaFoto?.click?.();
       return;
     }
@@ -440,16 +437,13 @@ const pecasPreDefinidas = [
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0);
 
-    // JPEG (melhor tamanho)
     const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
 
-    // preview
     if (previsualizacaoFoto) {
       previsualizacaoFoto.src = dataUrl;
       previsualizacaoFoto.classList.remove('hidden');
     }
 
-    // cria File e injeta no input[type=file]
     const res = await fetch(dataUrl);
     const blob = await res.blob();
     const file = new File([blob], `avaria-${Date.now()}.jpg`, { type: 'image/jpeg' });
@@ -612,14 +606,13 @@ const pecasPreDefinidas = [
     };
   }
 
-  // >>>>>>> CAPTURA ROBUSTA do <model-viewer> + fallback
   async function coletarCapturas(){
     let capturaCarroBase64 = null;
     try {
       if (modelo3d && modelo3d.shadowRoot) {
         const glCanvas = modelo3d.shadowRoot.querySelector('canvas');
         if (glCanvas) {
-          capturaCarroBase64 = glCanvas.toDataURL('image/png'); // base64 direto do WebGL
+          capturaCarroBase64 = glCanvas.toDataURL('image/png');
         }
       }
       if (!capturaCarroBase64) {
@@ -654,7 +647,7 @@ const pecasPreDefinidas = [
         nome:  pegarValorInput('veic_nome'),
         placa: pegarValorInput('veic_placa'),
         cor:   pegarValorInput('veic_cor'),
-        km:    toIntOrNull(pegarValorInput('veic_km')) // <<< número ou null
+        km:    toIntOrNull(pegarValorInput('veic_km'))
       },
       dataHoraEntrada: pegarValorInput('entry_datetime'),
       observacoes:     pegarValorInput('obs')
@@ -688,13 +681,12 @@ const pecasPreDefinidas = [
     const capturas    = await coletarCapturas();
     const avariasJson = coletarAvarias();
 
-    // Campo agregador para facilitar consumo (mantendo os campos originais)
     const imagens = {
       assinaturas: {
         clienteBase64: assinaturas.assinaturaClienteBase64 || null,
         responsavelBase64: assinaturas.assinaturaResponsavelBase64 || null
       },
-      capturas, // { capturaCarroBase64, capturaPaginaBase64 }
+      capturas,
       avariasBase64: avariasJson.map(a => a.fotoBase64).filter(Boolean)
     };
 
@@ -711,27 +703,104 @@ const pecasPreDefinidas = [
       assinaturas,
       capturas,
       pecasPreDefinidas,
-      imagens // agregado
+      imagens
     };
   }
+
+  /* ==========================================================
+     RESUMO (Tela 4)
+     ========================================================== */
+  function renderResumo(){
+    const wrap = $('#summary-content');
+    if (!wrap) return;
+
+    const cab = coletarCabecalho();
+    const comb = coletarCombustivel();
+    const itens = coletarChecklist();
+    const avs = coletarAvarias();
+
+    const resumoChecklist =
+      itens.length
+        ? itens.map(i => `
+            <div class="flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2 bg-white/70">
+              <span class="text-sm text-slate-700">${i.item}</span>
+              <span class="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-700">${i.status || '-'}</span>
+            </div>`).join('')
+        : '<p class="text-sm text-slate-500">Sem itens marcados.</p>';
+
+    const resumoAvarias =
+      avs.length
+        ? avs.map((d, idx) => `
+            <div class="border border-slate-200 rounded-lg p-3 bg-white/70">
+              <p class="text-sm font-semibold text-slate-800">${idx+1}. ${d.peca || 'Peça'} – ${d.tipo || '-'}</p>
+              <p class="text-xs text-slate-600">${d.observacoes || 'Sem observações.'}</p>
+            </div>`).join('')
+        : '<p class="text-sm text-slate-500">Nenhuma avaria registrada.</p>';
+
+    wrap.innerHTML = `
+      <!-- Identificação -->
+      <section class="rounded-xl border border-slate-200 bg-white/60 p-4">
+        <h3 class="text-base font-semibold text-slate-800 mb-3">1) Identificação</h3>
+        <div class="grid sm:grid-cols-2 gap-y-2 text-sm">
+          <div><span class="font-medium text-slate-700">O.S Interna:</span> ${cab.osInterna || '-'}</div>
+          <div><span class="font-medium text-slate-700">Entrada:</span> ${cab.dataHoraEntrada ? new Date(cab.dataHoraEntrada).toLocaleString('pt-BR') : '-'}</div>
+          <div class="sm:col-span-2 h-px bg-slate-200 my-2"></div>
+          <div><span class="font-medium text-slate-700">Cliente:</span> ${cab.cliente?.nome || '-'}</div>
+          <div><span class="font-medium text-slate-700">Doc:</span> ${cab.cliente?.doc || '-'}</div>
+          <div><span class="font-medium text-slate-700">Telefone:</span> ${cab.cliente?.tel || '-'}</div>
+          <div><span class="font-medium text-slate-700">Endereço:</span> ${cab.cliente?.end || '-'}</div>
+          <div class="sm:col-span-2 h-px bg-slate-200 my-2"></div>
+          <div><span class="font-medium text-slate-700">Veículo:</span> ${cab.veiculo?.nome || '-'}</div>
+          <div><span class="font-medium text-slate-700">Placa:</span> ${cab.veiculo?.placa || '-'}</div>
+          <div><span class="font-medium text-slate-700">Cor:</span> ${cab.veiculo?.cor || '-'}</div>
+          <div><span class="font-medium text-slate-700">KM:</span> ${Number.isFinite(cab.veiculo?.km) ? cab.veiculo.km : '-'}</div>
+        </div>
+      </section>
+
+      <!-- Inspeção -->
+      <section class="rounded-xl border border-slate-200 bg-white/60 p-4">
+        <h3 class="text-base font-semibold text-slate-800 mb-3">2) Inspeção</h3>
+        <p class="text-sm mb-3"><span class="font-medium text-slate-700">Nível de combustível:</span> ${comb.combustivelPercentual ?? 0}%</p>
+        <div class="space-y-2">
+          <p class="text-sm font-medium text-slate-700">Avarias registradas</p>
+          <div class="grid sm:grid-cols-2 gap-2">
+            ${resumoAvarias}
+          </div>
+        </div>
+      </section>
+
+      <!-- Checklist -->
+      <section class="rounded-xl border border-slate-200 bg-white/60 p-4">
+        <h3 class="text-base font-semibold text-slate-800 mb-3">3) Checklist</h3>
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          ${resumoChecklist}
+        </div>
+        <div class="mt-4">
+          <p class="text-sm font-medium text-slate-700 mb-1">Observações</p>
+          <div class="text-sm whitespace-pre-line p-3 rounded-lg border border-slate-200 bg-white/70">${cab.observacoes || '—'}</div>
+        </div>
+      </section>
+
+      <!-- Aviso -->
+      <p class="text-xs text-slate-500">Revise atentamente as informações acima. Ao assinar, você declara estar ciente do estado do veículo na entrada.</p>
+    `;
+  }
+  // expõe para o escopo global
+  window.renderResumo = renderResumo;
 
   /* ==========================================================
      PAYLOAD PARA API (sem pecasPreDefinidas) + COMPACTAÇÃO
      ========================================================== */
   async function montarPayloadParaApi() {
     const dados = await montarChecklistJson();
-
-    // remove pecasPreDefinidas do que vai para API (se existir na estrutura)
     const { pecasPreDefinidas: _remove, ...payload } = dados;
 
     const cab = payload.cabecalho || {};
     const cli = cab.cliente || {};
     const vei = cab.veiculo || {};
 
-    // normaliza KM para número ou null
     const kmVal = (Number.isFinite(vei.km) ? vei.km : null);
 
-    // normaliza data para ISO com 'Z' (UTC) se vier no formato do input datetime-local
     function toIsoZ(s) {
       if (!s) return null;
       if (/Z$/i.test(s)) return s;
@@ -740,7 +809,6 @@ const pecasPreDefinidas = [
     }
 
     const bodyApi = {
-      // ---- campos de topo (flat), exatamente como a API te mostrou ----
       osInterna: cab.osInterna || null,
       dataHoraEntrada: toIsoZ(cab.dataHoraEntrada) || null,
       observacoes: cab.observacoes || null,
@@ -754,7 +822,7 @@ const pecasPreDefinidas = [
       veiculoNome:  vei.nome  || null,
       veiculoPlaca: vei.placa || null,
       veiculoCor:   vei.cor   || null,
-      veiculoKm:    kmVal, // número ou null
+      veiculoKm:    kmVal,
 
       checklist: (payload.checklist || []).map(i => ({
         item:   i.item || '',
@@ -775,13 +843,10 @@ const pecasPreDefinidas = [
         timestamp: a.timestamp
       })),
 
-      // >>> nomes das assinaturas exatamente como a API pediu <<<
       assinaturasclienteBase64: payload.assinaturas?.assinaturaClienteBase64 || null,
       assinaturasresponsavelBase64: payload.assinaturas?.assinaturaResponsavelBase64 || null,
     };
 
-    // ====== COMPACTAÇÃO DE IMAGENS ======
-    // Assinaturas
     if (bodyApi.assinaturasclienteBase64) {
       bodyApi.assinaturasclienteBase64 =
         await compressDataUrl(bodyApi.assinaturasclienteBase64, 1000, 400, 0.7);
@@ -791,18 +856,15 @@ const pecasPreDefinidas = [
         await compressDataUrl(bodyApi.assinaturasresponsavelBase64, 1000, 400, 0.7);
     }
 
-    // Fotos das avarias
     for (const a of bodyApi.avarias) {
       if (a.fotoBase64) {
         a.fotoBase64 = await compressDataUrl(a.fotoBase64, 1280, 1280, 0.65);
       }
     }
 
-    // ====== LIMITE DE TAMANHO (soft cap) ======
-    const MAX_BYTES_SOFT = 8 * 1024 * 1024; // ~8MB
+    const MAX_BYTES_SOFT = 8 * 1024 * 1024;
     let bodyStr = JSON.stringify(bodyApi);
     if (approxByteLength(bodyStr) > MAX_BYTES_SOFT) {
-      // primeiro tira fotos das avarias
       bodyApi.avarias.forEach(a => delete a.fotoBase64);
       bodyStr = JSON.stringify(bodyApi);
     }
@@ -811,28 +873,7 @@ const pecasPreDefinidas = [
   }
 
   /* ==========================================================
-     Botão: Gerar JSON (download local)
-     ========================================================== */
-  botaoGerarJson?.addEventListener('click', async ()=>{
-    try{
-      botaoGerarJson.textContent = 'Gerando...';
-      botaoGerarJson.disabled = true;
-
-      const dados = await montarChecklistJson();
-      const placa = pegarValorInput('veic_placa') || 'veiculo';
-      const dataBR = new Date().toLocaleDateString('pt-BR').replace(/\//g,'-');
-      baixarJson(dados, `checklist-${placa}-${dataBR}.json`);
-    } catch(err){
-      console.error(err);
-      alert('Falha ao gerar JSON.');
-    } finally {
-      botaoGerarJson.textContent = 'Gerar JSON';
-      botaoGerarJson.disabled = false;
-    }
-  });
-
-  /* ==========================================================
-     PDF ESTRUTURADO POR DADOS (jsPDF + AutoTable)
+     Botões de exportação (se existirem na UI)
      ========================================================== */
   async function gerarPdfComDados(payload) {
     const doc = new window.jspdf.jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
@@ -924,19 +965,13 @@ const pecasPreDefinidas = [
       margin: { left: margem, right: margem, top: contentTop, bottom: margem },
       styles: { fontSize: 9, cellPadding: 2 },
       headStyles: { fillColor: [15, 23, 42], textColor: 255 },
-      columnStyles: {
-        0: { cellWidth: 70 },
-        1: { cellWidth: 25 },
-        2: { cellWidth: 70 },
-        3: { cellWidth: 25 },
-      },
+      columnStyles: { 0: { cellWidth: 70 }, 1: { cellWidth: 25 }, 2: { cellWidth: 70 }, 3: { cellWidth: 25 } },
       alternateRowStyles: { fillColor: [245, 247, 250] },
       pageBreak: 'auto'
     });
     y = doc.lastAutoTable.finalY + 8;
 
     sectionTitle('Avarias Registradas');
-
     const linhasAvarias = (payload.avarias || []).map(d => [
       d.peca || '',
       d.tipo || '',
@@ -953,14 +988,7 @@ const pecasPreDefinidas = [
       margin: { left: margem, right: margem, top: contentTop, bottom: margem },
       styles: { fontSize: 8, cellPadding: 2, valign: 'top' },
       headStyles: { fillColor: [2, 6, 23], textColor: 255 },
-      columnStyles: {
-        0: { cellWidth: 28 },
-        1: { cellWidth: 18 },
-        2: { cellWidth: 60 },
-        3: { cellWidth: 34 },
-        4: { cellWidth: 34 },
-        5: { cellWidth: 22 }
-      },
+      columnStyles: { 0: { cellWidth: 28 }, 1: { cellWidth: 18 }, 2: { cellWidth: 60 }, 3: { cellWidth: 34 }, 4: { cellWidth: 34 }, 5: { cellWidth: 22 } },
       alternateRowStyles: { fillColor: [245, 247, 250] },
       pageBreak: 'auto'
     });
@@ -1009,7 +1037,25 @@ const pecasPreDefinidas = [
     doc.save(`checklist-${placa}-${dataBR}.pdf`);
   }
 
-  // Botão: Gerar PDF (via dados)
+  // listeners export
+  botaoGerarJson?.addEventListener('click', async ()=>{
+    try{
+      botaoGerarJson.textContent = 'Gerando...';
+      botaoGerarJson.disabled = true;
+
+      const dados = await montarChecklistJson();
+      const placa = pegarValorInput('veic_placa') || 'veiculo';
+      const dataBR = new Date().toLocaleDateString('pt-BR').replace(/\//g,'-');
+      baixarJson(dados, `checklist-${placa}-${dataBR}.json`);
+    } catch(err){
+      console.error(err);
+      alert('Falha ao gerar JSON.');
+    } finally {
+      botaoGerarJson.textContent = 'Gerar JSON';
+      botaoGerarJson.disabled = false;
+    }
+  });
+
   botaoGerarPdf?.addEventListener('click', async ()=>{
     try{
       botaoGerarPdf.textContent = 'Gerando...';
@@ -1027,7 +1073,7 @@ const pecasPreDefinidas = [
   });
 
   /* ==========================================================
-     Helper de POST com timeout e erro legível (mobile friendly)
+     Helper de POST com timeout e erro legível
      ========================================================== */
   async function postJson(url, body, { timeoutMs = 20000 } = {}) {
     const ctrl = new AbortController();
@@ -1071,7 +1117,7 @@ const pecasPreDefinidas = [
   }
 
   /* ==========================================================
-     POST para a API (se existir o botão #send-api)
+     POST para a API
      ========================================================== */
   botaoSendApi?.addEventListener('click', async ()=>{
     try {
