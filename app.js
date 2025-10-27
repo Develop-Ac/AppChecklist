@@ -938,6 +938,66 @@ const pecasPreDefinidas = [
   }
 
   /* ==========================================================
+     RESET GERAL: limpa inputs, zera estado e volta à tela 1
+     ========================================================== */
+  function resetChecklistUI() {
+    // Campos básicos
+    const idsTexto = [
+      'os_interna','cli_nome','cli_doc','cli_tel','cli_end',
+      'veic_nome','veic_placa','veic_cor','veic_km','obs'
+    ];
+    idsTexto.forEach(id=>{
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') el.value = '';
+    });
+
+    // Data/Hora de entrada = agora
+    const entryDt = document.getElementById('entry_datetime');
+    if (entryDt) entryDt.value = new Date().toISOString().slice(0,16);
+
+    // Combustível: 50% e atualiza gauge
+    const fuelRange = document.getElementById('fuel-range');
+    if (fuelRange) {
+      fuelRange.value = 50;
+      const ev = new Event('input', { bubbles: true });
+      fuelRange.dispatchEvent(ev);
+    }
+
+    // Checklist: volta tudo para "OK"
+    $$('#items-checklist select').forEach(sel=>{
+      const ok = Array.from(sel.options).find(o => o.text === 'OK' || o.value === 'OK');
+      sel.value = ok ? ok.value : sel.options[0]?.value;
+    });
+
+    // Avarias: zera array e UI
+    avarias = [];
+    renderizarListaAvarias();
+
+    // Assinaturas: limpa os dois canvases
+    window.clearSignature?.('customer-signature');
+    window.clearSignature?.('inspector-signature');
+
+    // Limpa possíveis anexos/foto do modal
+    if (previsualizacaoFoto) {
+      previsualizacaoFoto.src = '';
+      previsualizacaoFoto.classList.add('hidden');
+    }
+    if (entradaFoto) entradaFoto.value = '';
+
+    // Resumo da tela 4
+    const wrap = document.getElementById('summary-content');
+    if (wrap) wrap.innerHTML = '';
+
+    // Volta para a Tela 1
+    telaAtual = 1;
+    atualizarWizardUI();
+
+    // Feedback
+    if (statusPost) statusPost.textContent = 'Formulário limpo e pronto para novo checklist.';
+  }
+
+  /* ==========================================================
      Botões de exportação (se existirem na UI)
      ========================================================== */
   async function gerarPdfComDados(payload) {
@@ -1196,6 +1256,10 @@ const pecasPreDefinidas = [
 
       if (statusPost) statusPost.textContent = 'Checklist salvo com sucesso!';
       botaoSendApi.textContent = 'Salvo ✅';
+
+      // Limpa tudo e volta para Tela 1 após sucesso
+      resetChecklistUI();
+
       setTimeout(()=> botaoSendApi.textContent = labelOrig, 2000);
     } catch (e) {
       console.error(e);
