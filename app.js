@@ -184,6 +184,71 @@ const pecasPreDefinidas = [
   if (entryDt) entryDt.value = new Date().toISOString().slice(0,16);
 
   /* ==========================================================
+     AUTO-PREENCHER PELOS DADOS DA O.S (GET /oficina/ordens-servico/{os})
+     ========================================================== */
+  const osInput   = document.getElementById('os_interna');
+  const cliNome   = document.getElementById('cli_nome');
+  const cliDoc    = document.getElementById('cli_doc');
+  const cliTel    = document.getElementById('cli_tel');
+  const cliEnd    = document.getElementById('cli_end');
+
+  async function fetchOrdemServico(osNum) {
+    const osSan = String(osNum || '').trim();
+    if (!osSan) return null;
+
+    const url = `https://intranetbackend.acacessorios.local/oficina/ordens-servico/${encodeURIComponent(osSan)}`;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 15000);
+
+    try {
+      const resp = await fetch(url, { signal: ctrl.signal });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status} – ${resp.statusText}`);
+      return await resp.json();
+    } catch (e) {
+      console.warn('Falha ao buscar OS:', e?.message || e);
+      return null;
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
+  function somenteDigitos(str, maxLen) {
+    const out = String(str || '').replace(/\D/g, '');
+    return typeof maxLen === 'number' ? out.slice(0, maxLen) : out;
+  }
+
+  async function preencherPorOS() {
+    const valorOS = osInput?.value;
+    const data = await fetchOrdemServico(valorOS);
+    if (!data) return;
+
+    if (cliNome) cliNome.value = data.cli_nome || '';
+    if (cliDoc)  cliDoc.value  = somenteDigitos(data.cpf_cnpj, 14); // apenas números
+    if (cliTel)  cliTel.value  = somenteDigitos(data.fone, 20);     // apenas números
+    if (cliEnd)  cliEnd.value  = data.endereco_completo || '';
+  }
+
+  if (osInput) {
+    osInput.addEventListener('blur', preencherPorOS);
+    osInput.addEventListener('change', preencherPorOS);
+    osInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        preencherPorOS();
+      }
+    });
+  }
+
+  // Opcional: ao avançar de tela, tentar popular se ainda não tiver sido preenchido
+  document.addEventListener('click', (e) => {
+    if (e.target?.id === 'btn-next' || e.target?.closest?.('.wizard-steps li')) {
+      if (osInput?.value && (!cliNome?.value || !cliDoc?.value || !cliTel?.value || !cliEnd?.value)) {
+        preencherPorOS();
+      }
+    }
+  });
+
+  /* ==========================================================
      BUILD CHECKLIST ITENS
      ========================================================== */
   (function construirChecklist(){
