@@ -23,6 +23,15 @@ function dataURLToImage(dataUrl) {
   });
 }
 
+async function fileToDataURL(file) {
+  return await new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = reject;
+    fr.readAsDataURL(file);
+  });
+}
+
 /**
  * Compacta um dataURL (PNG/JPEG) para JPEG com qualidade/limite de dimensão.
  * Retorna o próprio dataURL se pequeno (<200KB) ou inválido.
@@ -58,21 +67,17 @@ const totalTelas = 4;
 let telaAtual = 1;
 
 function atualizarWizardUI() {
-  // Mostra/oculta telas
   $$('.tela').forEach(sec=>{
     const n = Number(sec.dataset.tela);
     sec.classList.toggle('hidden', n !== telaAtual);
   });
-  // Stepper ativo
   $$('.wizard-steps li').forEach(li=>{
     li.classList.toggle('ativo', Number(li.dataset.step) === telaAtual);
   });
-  // Índice e botões
   $('#wizard-indice').textContent = String(telaAtual);
   $('#btn-prev').disabled = (telaAtual === 1);
   $('#btn-next').textContent = (telaAtual === totalTelas) ? 'Finalizar' : 'Próximo →';
 
-  // Ao entrar na Tela 4: preparar assinaturas e renderizar resumo
   if (telaAtual === 4) {
     window.ensureSignaturesReady?.();
     window.renderResumo?.();
@@ -86,7 +91,7 @@ function irParaTela(n) {
 
 function proximaTela() {
   if (telaAtual < totalTelas) irParaTela(telaAtual + 1);
-  else window.scrollTo({ top: 0, behavior: 'smooth' }); // Finalizar
+  else window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 function telaAnterior() { irParaTela(telaAtual - 1); }
 
@@ -100,7 +105,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
 });
 
 /* ==========================================================
-   HOTSPOTS PREDEFINIDOS — edite conforme o modelo 3D
+   HOTSPOTS PREDEFINIDOS
    ========================================================== */
 const pecasPreDefinidas = [
   { id:'capo',            label:'Capô',                   pos:{ x: 1.70, y: 1.00, z: 0.00 },  norm:{ x: 0.00, y: 1.00, z: 0.00 } },
@@ -130,7 +135,6 @@ const pecasPreDefinidas = [
   const { jsPDF } = window.jspdf;
 
   /* ---------- Cache de elementos (UMA única vez) ---------- */
-  const modelo3d           = $('#car3d');
   const statusModelo       = $('#model-status');
   const listaAvarias       = $('#damages-list');
 
@@ -184,7 +188,7 @@ const pecasPreDefinidas = [
   if (entryDt) entryDt.value = new Date().toISOString().slice(0,16);
 
   /* ==========================================================
-     AUTO-PREENCHER PELOS DADOS DA O.S (GET /oficina/ordens-servico/{os})
+     AUTO-PREENCHER PELOS DADOS DA O.S
      ========================================================== */
   const osInput   = document.getElementById('os_interna');
   const cliNome   = document.getElementById('cli_nome');
@@ -223,8 +227,8 @@ const pecasPreDefinidas = [
     if (!data) return;
 
     if (cliNome) cliNome.value = data.cli_nome || '';
-    if (cliDoc)  cliDoc.value  = somenteDigitos(data.cpf_cnpj, 14); // apenas números
-    if (cliTel)  cliTel.value  = somenteDigitos(data.fone, 20);     // apenas números
+    if (cliDoc)  cliDoc.value  = somenteDigitos(data.cpf_cnpj, 14);
+    if (cliTel)  cliTel.value  = somenteDigitos(data.fone, 20);
     if (cliEnd)  cliEnd.value  = data.endereco_completo || '';
   }
 
@@ -239,7 +243,6 @@ const pecasPreDefinidas = [
     });
   }
 
-  // Opcional: ao avançar de tela, tentar popular se ainda não tiver sido preenchido
   document.addEventListener('click', (e) => {
     if (e.target?.id === 'btn-next' || e.target?.closest?.('.wizard-steps li')) {
       if (osInput?.value && (!cliNome?.value || !cliDoc?.value || !cliTel?.value || !cliEnd?.value)) {
@@ -352,6 +355,7 @@ const pecasPreDefinidas = [
   /* ==========================================================
      STATUS DO MODELO 3D
      ========================================================== */
+  const modelo3d = $('#car3d');
   if (modelo3d) {
     modelo3d.addEventListener('load', ()=> setarStatus('ok', 'Modelo carregado.'));
     modelo3d.addEventListener('error',()=> setarStatus('err','Erro ao carregar GLB.'));
@@ -417,7 +421,7 @@ const pecasPreDefinidas = [
     entradaObservacoes.value = d.notes  || '';
 
     if (d.photo){
-      previsualizacaoFoto.src = d.photo;
+      previsualizacaoFoto.src = d.photo.startsWith('data:image') ? d.photo : d.photo; // já pode ser base64
       previsualizacaoFoto.classList.remove('hidden');
     } else {
       previsualizacaoFoto.classList.add('hidden');
@@ -430,18 +434,13 @@ const pecasPreDefinidas = [
   entradaFoto?.addEventListener('change', (e)=>{
     const arquivo = e.target.files?.[0];
     if(!arquivo) return;
-    // Usa URL do blob sem reencodar (qualidade máxima do arquivo do SO)
     const objectUrl = URL.createObjectURL(arquivo);
-    previsualizacaoFoto.src = objectUrl;
+    previsualizacaoFoto.src = objectUrl;          // preview rápido e nítido
     previsualizacaoFoto.classList.remove('hidden');
-    // Libera objectURL antigo quando a imagem carregar
-    previsualizacaoFoto.onload = () => {
-      // opcional: guardar e revogar depois se você mantiver múltiplas trocas
-    };
   });
 
   /* ==========================================================
-     CÂMERA (getUserMedia) — botão "Tirar foto" (QUALIDADE ALTA)
+     CÂMERA (getUserMedia) — ALTA QUALIDADE
      ========================================================== */
   const btnOpenCam   = $('#open-camera');
   const modalCam     = $('#camera-modal');
@@ -454,11 +453,10 @@ const pecasPreDefinidas = [
   let facingMode = 'environment';
   let lastObjectURL = null;
 
-  // Pedimos resolução alta; o navegador entregará o mais próximo possível
   const HIGH_CONSTRAINTS = {
     video: {
       facingMode,
-      width:  { ideal: 4032, min: 1280 }, // 12MP/alta, com mínimo decente
+      width:  { ideal: 4032, min: 1280 },
       height: { ideal: 3024, min: 720  },
       frameRate: { ideal: 30, max: 60 },
       advanced: [{ focusMode: 'continuous' }, { exposureMode: 'continuous' }]
@@ -469,12 +467,9 @@ const pecasPreDefinidas = [
   async function startCamera() {
     stopCamera();
     try {
-      // Atualiza facingMode atual
       HIGH_CONSTRAINTS.video.facingMode = facingMode;
 
-      // Alguns navegadores não aceitam advanced; fazemos um try simples
       camStream = await navigator.mediaDevices.getUserMedia(HIGH_CONSTRAINTS).catch(async () => {
-        // fallback suave
         return navigator.mediaDevices.getUserMedia({
           video: { facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
           audio: false
@@ -482,7 +477,6 @@ const pecasPreDefinidas = [
       });
 
       video.srcObject = camStream;
-      // Força o vídeo a usar dimensões naturais do stream
       const track = camStream.getVideoTracks()[0];
       const settings = track.getSettings?.() || {};
       if (settings.width && settings.height) {
@@ -504,55 +498,42 @@ const pecasPreDefinidas = [
     if (video) video.srcObject = null;
   }
 
-  // Captura em ALTA via ImageCapture se suportado (qualidade nativa do sensor)
   async function takeHighResPhotoBlob() {
     const track = camStream?.getVideoTracks?.()[0];
     if (!track) return null;
 
-    // Tenta ImageCapture
     if (window.ImageCapture) {
       try {
         const imageCapture = new ImageCapture(track);
-        // Alguns browsers suportam takePhoto com opções
-        let blob;
         try {
-          blob = await imageCapture.takePhoto();
+          return await imageCapture.takePhoto();
         } catch {
-          // Alguns exigem constraints menores; faz um fallback para getFrame de alta qualidade
           const bitmap = await imageCapture.grabFrame();
           const canvas = document.createElement('canvas');
           canvas.width = bitmap.width;
           canvas.height = bitmap.height;
           const ctx = canvas.getContext('2d');
           ctx.drawImage(bitmap, 0, 0);
-          blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.98));
+          return await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.98));
         }
-        return blob;
       } catch (err) {
-        // Continua para fallback do canvas
-        console.warn('ImageCapture indisponível/fracassou, usando fallback:', err?.message || err);
+        console.warn('ImageCapture falhou; usando fallback:', err?.message || err);
       }
     }
 
-    // Fallback: captura do vídeo com resolução do stream (sem reencodar além do inevitável)
     if (video && video.videoWidth) {
       const canvas = document.createElement('canvas');
-      // Usa resolução nativa do stream (não a do elemento na tela)
       canvas.width  = video.videoWidth;
       canvas.height = video.videoHeight;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0);
-
-      // Usa qualidade alta no fallback; você já comprime no envio
       return await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.98));
     }
-
     return null;
   }
 
   btnOpenCam?.addEventListener('click', async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
-      // Sem suporte: cai para o input file (câmera nativa do SO)
       entradaFoto?.click?.();
       return;
     }
@@ -574,7 +555,6 @@ const pecasPreDefinidas = [
     const blob = await takeHighResPhotoBlob();
     if (!blob) return;
 
-    // Mostra preview em ALTA sem reencodar (URL de blob)
     if (lastObjectURL) URL.revokeObjectURL(lastObjectURL);
     const objectUrl = URL.createObjectURL(blob);
     lastObjectURL = objectUrl;
@@ -582,7 +562,6 @@ const pecasPreDefinidas = [
     previsualizacaoFoto.src = objectUrl;
     previsualizacaoFoto.classList.remove('hidden');
 
-    // Cria um File para simular input (nome com timestamp)
     const file = new File([blob], `avaria-${Date.now()}.jpg`, { type: blob.type || 'image/jpeg' });
     const dt = new DataTransfer();
     dt.items.add(file);
@@ -593,9 +572,9 @@ const pecasPreDefinidas = [
   });
 
   /* ==========================================================
-     SUBMIT do formulário de AVARIA
+     SUBMIT do formulário de AVARIA — SALVA EM BASE64
      ========================================================== */
-  formularioAvaria?.addEventListener('submit', (e)=>{
+  formularioAvaria?.addEventListener('submit', async (e)=>{
     e.preventDefault();
 
     const pos   = JSON.parse(entradaPosicao3d.value||'{}');
@@ -604,16 +583,22 @@ const pecasPreDefinidas = [
     const peca  = entradaPeca.value?.trim()   || '';
     const notas = entradaObservacoes.value     || '';
 
-    // Se o usuário tirou foto via câmera nativa (input file), usamos URL de blob
-    // Se veio de captura, usamos o objectURL atual
-    let fotoBase64;
-    if (previsualizacaoFoto.src?.startsWith('blob:')) {
-      // Converte blob URL -> base64 apenas para guardar na estrutura (preview já está ok)
-      // Isso é opcional; também poderíamos subir como File no FormData.
-      fotoBase64 = null; // vamos converter somente no envio, se necessário
-    } else if ((previsualizacaoFoto.src||'').startsWith('data:image')) {
+    let fotoBase64 = null;
+
+    // 1) Se já veio como dataURL (ex.: usuário colou/arrastou), usa direto.
+    if ((previsualizacaoFoto.src||'').startsWith('data:image')) {
       fotoBase64 = previsualizacaoFoto.src;
     }
+    // 2) Se preview é blob: e há um arquivo no input, converte o arquivo para Base64 agora.
+    else if (previsualizacaoFoto.src?.startsWith('blob:') && entradaFoto?.files?.[0]) {
+      try {
+        fotoBase64 = await fileToDataURL(entradaFoto.files[0]); // alta qualidade
+      } catch (err) {
+        console.warn('Falha ao converter para Base64:', err);
+        fotoBase64 = null;
+      }
+    }
+    // 3) Se não tem nada, deixa nulo
 
     const registro = {
       pos3d: pos,
@@ -621,7 +606,7 @@ const pecasPreDefinidas = [
       type: tipo,
       part: peca,
       notes: notas,
-      photo: fotoBase64 || previsualizacaoFoto.src || undefined,
+      photo: fotoBase64 || undefined,   // <<< GUARDA BASE64
       timestamp: Date.now()
     };
 
@@ -822,7 +807,7 @@ const pecasPreDefinidas = [
       observacoes: d.notes,
       posicao3d: d.pos3d,
       normal3d:  d.norm3d,
-      fotoBase64: d.photo || null,
+      fotoBase64: d.photo || null,   // <<< JÁ ESTÁ EM BASE64
       timestamp: d.timestamp
     }));
   }
@@ -892,7 +877,6 @@ const pecasPreDefinidas = [
         : '<p class="text-sm text-slate-500">Nenhuma avaria registrada.</p>';
 
     wrap.innerHTML = `
-      <!-- Identificação -->
       <section class="rounded-xl border border-slate-200 bg-white/60 p-4">
         <h3 class="text-base font-semibold text-slate-800 mb-3">1) Identificação</h3>
         <div class="grid sm:grid-cols-2 gap-y-2 text-sm">
@@ -911,7 +895,6 @@ const pecasPreDefinidas = [
         </div>
       </section>
 
-      <!-- Inspeção -->
       <section class="rounded-xl border border-slate-200 bg-white/60 p-4">
         <h3 class="text-base font-semibold text-slate-800 mb-3">2) Inspeção</h3>
         <p class="text-sm mb-3"><span class="font-medium text-slate-700">Nível de combustível:</span> ${comb.combustivelPercentual ?? 0}%</p>
@@ -923,7 +906,6 @@ const pecasPreDefinidas = [
         </div>
       </section>
 
-      <!-- Checklist -->
       <section class="rounded-xl border border-slate-200 bg-white/60 p-4">
         <h3 class="text-base font-semibold text-slate-800 mb-3">3) Checklist</h3>
         <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -935,11 +917,9 @@ const pecasPreDefinidas = [
         </div>
       </section>
 
-      <!-- Aviso -->
       <p class="text-xs text-slate-500">Revise atentamente as informações acima. Ao assinar, você declara estar ciente do estado do veículo na entrada.</p>
     `;
   }
-  // expõe para o escopo global
   window.renderResumo = renderResumo;
 
   /* ==========================================================
@@ -1001,7 +981,7 @@ const pecasPreDefinidas = [
       assinaturasresponsavelBase64: payload.assinaturas?.assinaturaResponsavelBase64 || null,
     };
 
-    // Compactação de imagens APENAS no envio (mantém preview em alta)
+    // Compacta APENAS no envio (mantém preview nítido)
     if (bodyApi.assinaturasclienteBase64) {
       bodyApi.assinaturasclienteBase64 =
         await compressDataUrl(bodyApi.assinaturasclienteBase64, 1000, 400, 0.7);
@@ -1014,16 +994,6 @@ const pecasPreDefinidas = [
     for (const a of bodyApi.avarias) {
       if (a.fotoBase64) {
         a.fotoBase64 = await compressDataUrl(a.fotoBase64, 1280, 1280, 0.65);
-      } else if (entradaFoto?.files?.[0] && previsualizacaoFoto?.src?.startsWith('blob:')) {
-        // Se o registro atual for o último capturado (blob URL), converte agora para Base64
-        // (heurística simples: usa o arquivo presente no input)
-        const file = entradaFoto.files[0];
-        const b64 = await new Promise((resolve) => {
-          const fr = new FileReader();
-          fr.onload = () => resolve(fr.result);
-          fr.readAsDataURL(file);
-        });
-        a.fotoBase64 = await compressDataUrl(b64, 1280, 1280, 0.65);
       }
     }
 
@@ -1038,10 +1008,9 @@ const pecasPreDefinidas = [
   }
 
   /* ==========================================================
-     RESET GERAL: limpa inputs, zera estado e volta à tela 1
+     RESET GERAL
      ========================================================== */
   function resetChecklistUI() {
-    // Campos básicos
     const idsTexto = [
       'os_interna','cli_nome','cli_doc','cli_tel','cli_end',
       'veic_nome','veic_placa','veic_cor','veic_km','obs'
@@ -1052,11 +1021,9 @@ const pecasPreDefinidas = [
       if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') el.value = '';
     });
 
-    // Data/Hora de entrada = agora
     const entryDt = document.getElementById('entry_datetime');
     if (entryDt) entryDt.value = new Date().toISOString().slice(0,16);
 
-    // Combustível: 50% e atualiza gauge
     const fuelRange = document.getElementById('fuel-range');
     if (fuelRange) {
       fuelRange.value = 50;
@@ -1064,41 +1031,34 @@ const pecasPreDefinidas = [
       fuelRange.dispatchEvent(ev);
     }
 
-    // Checklist: volta tudo para "OK"
     $$('#items-checklist select').forEach(sel=>{
       const ok = Array.from(sel.options).find(o => o.text === 'OK' || o.value === 'OK');
       sel.value = ok ? ok.value : sel.options[0]?.value;
     });
 
-    // Avarias: zera array e UI
     avarias = [];
     renderizarListaAvarias();
 
-    // Assinaturas: limpa os dois canvases
     window.clearSignature?.('customer-signature');
     window.clearSignature?.('inspector-signature');
 
-    // Limpa possíveis anexos/foto do modal
     if (previsualizacaoFoto) {
       previsualizacaoFoto.src = '';
       previsualizacaoFoto.classList.add('hidden');
     }
     if (entradaFoto) entradaFoto.value = '';
 
-    // Resumo da tela 4
     const wrap = document.getElementById('summary-content');
     if (wrap) wrap.innerHTML = '';
 
-    // Volta para a Tela 1
     telaAtual = 1;
     atualizarWizardUI();
 
-    // Feedback
     if (statusPost) statusPost.textContent = 'Formulário limpo e pronto para novo checklist.';
   }
 
   /* ==========================================================
-     Botões de exportação (se existirem na UI)
+     Exportações
      ========================================================== */
   async function gerarPdfComDados(payload) {
     const doc = new window.jspdf.jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
@@ -1357,7 +1317,6 @@ const pecasPreDefinidas = [
       if (statusPost) statusPost.textContent = 'Checklist salvo com sucesso!';
       botaoSendApi.textContent = 'Salvo ✅';
 
-      // Limpa tudo e volta para Tela 1 após sucesso
       resetChecklistUI();
 
       setTimeout(()=> botaoSendApi.textContent = labelOrig, 2000);
