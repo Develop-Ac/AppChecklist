@@ -430,16 +430,18 @@ const pecasPreDefinidas = [
   entradaFoto?.addEventListener('change', (e)=>{
     const arquivo = e.target.files?.[0];
     if(!arquivo) return;
-    const reader = new FileReader();
-    reader.onload = (ev)=>{
-      previsualizacaoFoto.src = ev.target.result;
-      previsualizacaoFoto.classList.remove('hidden');
+    // Usa URL do blob sem reencodar (qualidade máxima do arquivo do SO)
+    const objectUrl = URL.createObjectURL(arquivo);
+    previsualizacaoFoto.src = objectUrl;
+    previsualizacaoFoto.classList.remove('hidden');
+    // Libera objectURL antigo quando a imagem carregar
+    previsualizacaoFoto.onload = () => {
+      // opcional: guardar e revogar depois se você mantiver múltiplas trocas
     };
-    reader.readAsDataURL(arquivo);
   });
 
   /* ==========================================================
-     CÂMERA (getUserMedia) — botão "Tirar foto"
+     CÂMERA (getUserMedia) — botão "Tirar foto" (QUALIDADE ALTA)
      ========================================================== */
   const btnOpenCam   = $('#open-camera');
   const modalCam     = $('#camera-modal');
@@ -450,15 +452,43 @@ const pecasPreDefinidas = [
 
   let camStream = null;
   let facingMode = 'environment';
+  let lastObjectURL = null;
+
+  // Pedimos resolução alta; o navegador entregará o mais próximo possível
+  const HIGH_CONSTRAINTS = {
+    video: {
+      facingMode,
+      width:  { ideal: 4032, min: 1280 }, // 12MP/alta, com mínimo decente
+      height: { ideal: 3024, min: 720  },
+      frameRate: { ideal: 30, max: 60 },
+      advanced: [{ focusMode: 'continuous' }, { exposureMode: 'continuous' }]
+    },
+    audio: false
+  };
 
   async function startCamera() {
     stopCamera();
     try {
-      camStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode },
-        audio: false
+      // Atualiza facingMode atual
+      HIGH_CONSTRAINTS.video.facingMode = facingMode;
+
+      // Alguns navegadores não aceitam advanced; fazemos um try simples
+      camStream = await navigator.mediaDevices.getUserMedia(HIGH_CONSTRAINTS).catch(async () => {
+        // fallback suave
+        return navigator.mediaDevices.getUserMedia({
+          video: { facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
+          audio: false
+        });
       });
+
       video.srcObject = camStream;
+      // Força o vídeo a usar dimensões naturais do stream
+      const track = camStream.getVideoTracks()[0];
+      const settings = track.getSettings?.() || {};
+      if (settings.width && settings.height) {
+        video.width = settings.width;
+        video.height = settings.height;
+      }
     } catch (e) {
       alert('Não foi possível acessar a câmera: ' + (e?.message || e));
       stopCamera();
@@ -474,8 +504,55 @@ const pecasPreDefinidas = [
     if (video) video.srcObject = null;
   }
 
+  // Captura em ALTA via ImageCapture se suportado (qualidade nativa do sensor)
+  async function takeHighResPhotoBlob() {
+    const track = camStream?.getVideoTracks?.()[0];
+    if (!track) return null;
+
+    // Tenta ImageCapture
+    if (window.ImageCapture) {
+      try {
+        const imageCapture = new ImageCapture(track);
+        // Alguns browsers suportam takePhoto com opções
+        let blob;
+        try {
+          blob = await imageCapture.takePhoto();
+        } catch {
+          // Alguns exigem constraints menores; faz um fallback para getFrame de alta qualidade
+          const bitmap = await imageCapture.grabFrame();
+          const canvas = document.createElement('canvas');
+          canvas.width = bitmap.width;
+          canvas.height = bitmap.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(bitmap, 0, 0);
+          blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.98));
+        }
+        return blob;
+      } catch (err) {
+        // Continua para fallback do canvas
+        console.warn('ImageCapture indisponível/fracassou, usando fallback:', err?.message || err);
+      }
+    }
+
+    // Fallback: captura do vídeo com resolução do stream (sem reencodar além do inevitável)
+    if (video && video.videoWidth) {
+      const canvas = document.createElement('canvas');
+      // Usa resolução nativa do stream (não a do elemento na tela)
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0);
+
+      // Usa qualidade alta no fallback; você já comprime no envio
+      return await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.98));
+    }
+
+    return null;
+  }
+
   btnOpenCam?.addEventListener('click', async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
+      // Sem suporte: cai para o input file (câmera nativa do SO)
       entradaFoto?.click?.();
       return;
     }
@@ -494,25 +571,19 @@ const pecasPreDefinidas = [
   });
 
   btnTakePhoto?.addEventListener('click', async () => {
-    if (!video || !video.videoWidth) return;
+    const blob = await takeHighResPhotoBlob();
+    if (!blob) return;
 
-    const canvas = document.createElement('canvas');
-    canvas.width  = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0);
+    // Mostra preview em ALTA sem reencodar (URL de blob)
+    if (lastObjectURL) URL.revokeObjectURL(lastObjectURL);
+    const objectUrl = URL.createObjectURL(blob);
+    lastObjectURL = objectUrl;
 
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    previsualizacaoFoto.src = objectUrl;
+    previsualizacaoFoto.classList.remove('hidden');
 
-    if (previsualizacaoFoto) {
-      previsualizacaoFoto.src = dataUrl;
-      previsualizacaoFoto.classList.remove('hidden');
-    }
-
-    const res = await fetch(dataUrl);
-    const blob = await res.blob();
-    const file = new File([blob], `avaria-${Date.now()}.jpg`, { type: 'image/jpeg' });
-
+    // Cria um File para simular input (nome com timestamp)
+    const file = new File([blob], `avaria-${Date.now()}.jpg`, { type: blob.type || 'image/jpeg' });
     const dt = new DataTransfer();
     dt.items.add(file);
     if (entradaFoto) entradaFoto.files = dt.files;
@@ -532,9 +603,27 @@ const pecasPreDefinidas = [
     const tipo  = ($('input[name="damage-type"]:checked')?.value) || 'Não especificado';
     const peca  = entradaPeca.value?.trim()   || '';
     const notas = entradaObservacoes.value     || '';
-    const foto  = (previsualizacaoFoto.src||'').startsWith('data:image') ? previsualizacaoFoto.src : undefined;
 
-    const registro = { pos3d: pos, norm3d: norm, type: tipo, part: peca, notes: notas, photo: foto, timestamp: Date.now() };
+    // Se o usuário tirou foto via câmera nativa (input file), usamos URL de blob
+    // Se veio de captura, usamos o objectURL atual
+    let fotoBase64;
+    if (previsualizacaoFoto.src?.startsWith('blob:')) {
+      // Converte blob URL -> base64 apenas para guardar na estrutura (preview já está ok)
+      // Isso é opcional; também poderíamos subir como File no FormData.
+      fotoBase64 = null; // vamos converter somente no envio, se necessário
+    } else if ((previsualizacaoFoto.src||'').startsWith('data:image')) {
+      fotoBase64 = previsualizacaoFoto.src;
+    }
+
+    const registro = {
+      pos3d: pos,
+      norm3d: norm,
+      type: tipo,
+      part: peca,
+      notes: notas,
+      photo: fotoBase64 || previsualizacaoFoto.src || undefined,
+      timestamp: Date.now()
+    };
 
     if (indiceEdicao !== null) {
       avarias[indiceEdicao] = { ...avarias[indiceEdicao], ...registro };
@@ -912,6 +1001,7 @@ const pecasPreDefinidas = [
       assinaturasresponsavelBase64: payload.assinaturas?.assinaturaResponsavelBase64 || null,
     };
 
+    // Compactação de imagens APENAS no envio (mantém preview em alta)
     if (bodyApi.assinaturasclienteBase64) {
       bodyApi.assinaturasclienteBase64 =
         await compressDataUrl(bodyApi.assinaturasclienteBase64, 1000, 400, 0.7);
@@ -924,6 +1014,16 @@ const pecasPreDefinidas = [
     for (const a of bodyApi.avarias) {
       if (a.fotoBase64) {
         a.fotoBase64 = await compressDataUrl(a.fotoBase64, 1280, 1280, 0.65);
+      } else if (entradaFoto?.files?.[0] && previsualizacaoFoto?.src?.startsWith('blob:')) {
+        // Se o registro atual for o último capturado (blob URL), converte agora para Base64
+        // (heurística simples: usa o arquivo presente no input)
+        const file = entradaFoto.files[0];
+        const b64 = await new Promise((resolve) => {
+          const fr = new FileReader();
+          fr.onload = () => resolve(fr.result);
+          fr.readAsDataURL(file);
+        });
+        a.fotoBase64 = await compressDataUrl(b64, 1280, 1280, 0.65);
       }
     }
 
