@@ -35,7 +35,6 @@ async function fileToDataURL(file) {
 /**
  * Compacta um dataURL (PNG/JPEG) para JPEG com qualidade/limite de dimensão.
  * Retorna o próprio dataURL se pequeno (<200KB) ou inválido.
- * (Mantido para assinaturas/capturas; fotos de avaria agora usam upload e key.)
  */
 async function compressDataUrl(dataUrl, maxW = 1280, maxH = 1280, quality = 0.65) {
   if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image')) return dataUrl;
@@ -59,26 +58,6 @@ async function compressDataUrl(dataUrl, maxW = 1280, maxH = 1280, quality = 0.65
 
   const out = canvas.toDataURL('image/jpeg', quality);
   return out;
-}
-
-/* ==========================================================
-   Upload da FOTO de AVARIA — recebe KEY do backend
-   ========================================================== */
-async function uploadAvariaFile(file) {
-  if (!file) throw new Error('Arquivo ausente para upload.');
-  const url = 'https://intranetbackend.acacessorios.local/oficina/uploads/avarias';
-  const fd = new FormData();
-  fd.append('file', file);
-
-  const resp = await fetch(url, { method: 'POST', body: fd });
-  if (!resp.ok) {
-    const txt = await resp.text().catch(() => '');
-    throw new Error(`Falha no upload da avaria: HTTP ${resp.status} ${txt}`);
-  }
-  const data = await resp.json().catch(() => null);
-  if (!data?.ok || !data?.key) throw new Error('Resposta de upload inválida (sem key).');
-
-  return data.key; // chave exata no bucket (ex.: "94hn9prm450t.png")
 }
 
 /* ==========================================================
@@ -174,8 +153,8 @@ const pecasPreDefinidas = [
   const botaoSendApi       = $('#send-api');
   const statusPost         = $('#post-status');
 
-  // Estado das avarias: agora usamos photoKey (não base64)
-  /** @type {{pos3d:{x:number,y:number,z:number}, norm3d:{x:number,y:number,z:number}, type:string, part:string, notes:string, photoKey?:string, timestamp:number}[]} */
+  // Estado das avarias
+  /** @type {{pos3d:{x:number,y:number,z:number}, norm3d:{x:number,y:number,z:number}, type:string, part:string, notes:string, fotoBase64?:string, timestamp:number}[]} */
   let avarias = [];
   let indiceEdicao = null;
 
@@ -441,9 +420,12 @@ const pecasPreDefinidas = [
     entradaPeca.value        = d.part   || '';
     entradaObservacoes.value = d.notes  || '';
 
-    // Preview: como agora só guardamos a key, não há preview persistente após fechar o modal.
-    previsualizacaoFoto.classList.add('hidden');
-
+    if (d.fotoBase64){
+      previsualizacaoFoto.src = d.fotoBase64.startsWith('data:image') ? d.fotoBase64 : d.fotoBase64;
+      previsualizacaoFoto.classList.remove('hidden');
+    } else {
+      previsualizacaoFoto.classList.add('hidden');
+    }
     modalAvaria.showModal();
   }
 
@@ -580,7 +562,6 @@ const pecasPreDefinidas = [
     previsualizacaoFoto.src = objectUrl;
     previsualizacaoFoto.classList.remove('hidden');
 
-    // Atualiza o input file com a foto capturada (para upload)
     const file = new File([blob], `avaria-${Date.now()}.jpg`, { type: blob.type || 'image/jpeg' });
     const dt = new DataTransfer();
     dt.items.add(file);
@@ -591,7 +572,7 @@ const pecasPreDefinidas = [
   });
 
   /* ==========================================================
-     SUBMIT do formulário de AVARIA — UPLOAD e guarda KEY
+     SUBMIT do formulário de AVARIA — FLUXO COM UPLOAD + fotoBase64=key
      ========================================================== */
   formularioAvaria?.addEventListener('submit', async (e)=>{
     e.preventDefault();
@@ -602,24 +583,44 @@ const pecasPreDefinidas = [
     const peca  = entradaPeca.value?.trim()   || '';
     const notas = entradaObservacoes.value     || '';
 
-    // Upload da foto (se houver) para o backend -> retorna KEY
-    let photoKey = null;
+    let fotoKeyFromUpload = null;
+
+    // Se houver arquivo selecionado ou foto capturada, fazemos upload para o backend de uploads,
+    // que trata a compressão e sobe no MinIO, retornando a `key`.
     if (entradaFoto?.files?.[0]) {
       try {
-        photoKey = await uploadAvariaFile(entradaFoto.files[0]);
+        const form = new FormData();
+        form.append('file', entradaFoto.files[0]);
+        const resp = await fetch('https://intranetbackend.acacessorios.local/oficina/uploads/avarias', {
+          method: 'POST',
+          body: form,
+        });
+        if (!resp.ok) {
+          const t = await resp.text().catch(()=> '');
+          throw new Error(`HTTP ${resp.status} – ${t || resp.statusText}`);
+        }
+        const data = await resp.json();
+        console.log('[UPLOAD /avarias] response:', data);
+        const key = data?.key || data?.fileName || null;
+        console.log('[UPLOAD /avarias] key escolhida:', key);
+        fotoKeyFromUpload = key;
       } catch (err) {
-        console.warn('Falha ao enviar foto para MinIO:', err?.message || err);
-        // opcional: alert('Não foi possível enviar a foto. Tente novamente.');
+        console.error('[UPLOAD /avarias] falha no upload:', err);
+        alert('Falha ao enviar a foto da avaria. Tente novamente.');
+        return;
       }
     }
 
+    // Monta o registro de avaria. IMPORTANTE:
+    // Agora o backend espera `fotoBase64`. Vamos enviar a KEY no campo `fotoBase64`.
+    // (Seu backend passará a armazenar esse valor; o nome do campo permanece o mesmo.)
     const registro = {
       pos3d: pos,
       norm3d: norm,
       type: tipo,
       part: peca,
       notes: notas,
-      photoKey: photoKey || undefined,   // <<< GUARDA A KEY
+      fotoBase64: fotoKeyFromUpload || null, // <<< aqui vai a KEY
       timestamp: Date.now()
     };
 
@@ -628,6 +629,7 @@ const pecasPreDefinidas = [
     } else {
       avarias.push(registro);
     }
+    console.log('[AVARIA - registro inserido]', registro);
     renderizarListaAvarias();
     modalAvaria.close();
   });
@@ -640,14 +642,14 @@ const pecasPreDefinidas = [
       return;
     }
     avarias.forEach((d, i)=>{
-      const coords = d.pos3d ? ` (x:${Number(d.pos3d.x).toFixed(2)}, y:${Number(d.pos3d.y).toFixed(2)}, z:${Number(d.pos3d.z).toFixed(2)})` : '';
+      const coords = d.pos3d ? ` (x:${d.pos3d.x.toFixed(2)}, y:${d.pos3d.y.toFixed(2)}, z:${d.pos3d.z.toFixed(2)})` : '';
       const linha = document.createElement('div');
       linha.className = 'bg-white/70 border border-slate-200 rounded-xl px-4 py-3 shadow-sm flex justify-between items-center';
       linha.innerHTML = `
         <div>
           <p class="font-semibold text-slate-800">${i+1}. <span class="font-medium">${d.part || 'Peça'}</span> – ${d.type}${coords}</p>
           <p class="text-sm text-slate-500">${d.notes || 'Sem observações.'}</p>
-          ${d.photoKey ? `<p class="text-xs text-slate-400">foto: ${d.photoKey}</p>` : ''}
+          ${d.fotoBase64 ? `<p class="text-xs text-slate-400 break-all">fotoBase64 (key): ${d.fotoBase64}</p>` : ''}
         </div>
         <div class="flex items-center gap-3">
           <button class="editar text-blue-600 hover:text-blue-800 text-sm">Editar</button>
@@ -821,7 +823,7 @@ const pecasPreDefinidas = [
       observacoes: d.notes,
       posicao3d: d.pos3d,
       normal3d:  d.norm3d,
-      fotoKey: d.photoKey || null,   // <<< apenas a KEY (sem base64)
+      fotoBase64: d.fotoBase64 || null, // <<< compatível com o backend
       timestamp: d.timestamp
     }));
   }
@@ -840,15 +842,14 @@ const pecasPreDefinidas = [
         responsavelBase64: assinaturas.assinaturaResponsavelBase64 || null
       },
       capturas,
-      // agora não guardamos base64 de avaria — apenas key no payload
-      avariasBase64: [] 
+      avariasBase64: avariasJson.map(a => a.fotoBase64).filter(Boolean)
     };
 
     return {
       meta: {
         geradoEmIso: new Date().toISOString(),
         app: 'Checklist Entrada Veículo 3D',
-        versao: '1.1.0'
+        versao: '1.0.0'
       },
       cabecalho,
       combustivel,
@@ -888,7 +889,7 @@ const pecasPreDefinidas = [
             <div class="border border-slate-200 rounded-lg p-3 bg-white/70">
               <p class="text-sm font-semibold text-slate-800">${idx+1}. ${d.peca || 'Peça'} – ${d.tipo || '-'}</p>
               <p class="text-xs text-slate-600">${d.observacoes || 'Sem observações.'}</p>
-              ${d.fotoKey ? `<p class="text-[11px] text-slate-400 mt-1">foto: ${d.fotoKey}</p>` : ''}
+              ${d.fotoBase64 ? `<p class="text-[10px] text-slate-400 break-all mt-1">fotoBase64 (key): ${d.fotoBase64}</p>` : ''}
             </div>`).join('')
         : '<p class="text-sm text-slate-500">Nenhuma avaria registrada.</p>';
 
@@ -939,7 +940,7 @@ const pecasPreDefinidas = [
   window.renderResumo = renderResumo;
 
   /* ==========================================================
-     PAYLOAD PARA API (sem pecasPreDefinidas) + COMPACTAÇÃO de assinaturas
+     PAYLOAD PARA API (sem pecasPreDefinidas) + COMPACTAÇÃO
      ========================================================== */
   async function montarPayloadParaApi() {
     const dados = await montarChecklistJson();
@@ -979,7 +980,7 @@ const pecasPreDefinidas = [
         status: i.status || ''
       })),
 
-      // <<< agora enviamos fotoKey (sem base64)
+      // >>> avarias compatível com o backend (espera fotoBase64)
       avarias: (payload.avarias || []).map(a => ({
         tipo: a.tipo,
         peca: a.peca,
@@ -990,16 +991,15 @@ const pecasPreDefinidas = [
         normX: a.normal3d?.x,
         normY: a.normal3d?.y,
         normZ: a.normal3d?.z,
-        fotoKey: a.fotoKey || null,
+        fotoBase64: a.fotoBase64 || null, // aqui vai a KEY como string
         timestamp: a.timestamp
       })),
 
-      // Assinaturas continuam base64 (com compactação leve abaixo)
       assinaturasclienteBase64: payload.assinaturas?.assinaturaClienteBase64 || null,
       assinaturasresponsavelBase64: payload.assinaturas?.assinaturaResponsavelBase64 || null,
     };
 
-    // Compacta assinaturas apenas (fotos de avaria já foram para o MinIO)
+    // Se as assinaturas forem base64 reais, compacta:
     if (bodyApi.assinaturasclienteBase64) {
       bodyApi.assinaturasclienteBase64 =
         await compressDataUrl(bodyApi.assinaturasclienteBase64, 1000, 400, 0.7);
@@ -1009,7 +1009,22 @@ const pecasPreDefinidas = [
         await compressDataUrl(bodyApi.assinaturasresponsavelBase64, 1000, 400, 0.7);
     }
 
-    // Sem loop de compressão de fotos aqui (não existe mais fotoBase64 nas avarias)
+    // Se houver fotoBase64 em avarias que seja dataURL, compacta; se for apenas a key (string simples), a função mantém como está.
+    for (const a of bodyApi.avarias) {
+      if (a.fotoBase64) {
+        a.fotoBase64 = await compressDataUrl(a.fotoBase64, 1280, 1280, 0.65);
+      }
+    }
+
+    // Limite de payload: se exceder, remove imagens das avarias (não deve ocorrer, pois agora mandamos key)
+    const MAX_BYTES_SOFT = 8 * 1024 * 1024;
+    let bodyStr = JSON.stringify(bodyApi);
+    if (approxByteLength(bodyStr) > MAX_BYTES_SOFT) {
+      bodyApi.avarias.forEach(a => delete a.fotoBase64);
+      bodyStr = JSON.stringify(bodyApi);
+    }
+
+    console.log('[POST /checklists] body:', bodyApi);
     return bodyApi;
   }
 
@@ -1318,7 +1333,8 @@ const pecasPreDefinidas = [
       if (statusPost) statusPost.textContent = '';
 
       const body = await montarPayloadParaApi();
-      await postJson(API_URL, body, { timeoutMs: 20000 });
+      const resp = await postJson(API_URL, body, { timeoutMs: 20000 });
+      console.log('[POST /checklists] resp:', resp);
 
       if (statusPost) statusPost.textContent = 'Checklist salvo com sucesso!';
       botaoSendApi.textContent = 'Salvo ✅';
