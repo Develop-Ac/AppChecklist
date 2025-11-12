@@ -5,7 +5,7 @@ const $  = (s, r=document)=>r.querySelector(s);
 const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
 
 /* ========== Config API (mesma origem via proxy) ========== */
-const API_URL = "https://intranetbackend.acacessorios.local/oficina/checklists";
+const API_URL = "http://intranetbackend.acacessorios.local/oficina/checklists";
 
 /* ===== Helpers de tamanho/compactação ===== */
 function approxByteLength(value) {
@@ -200,7 +200,7 @@ const pecasPreDefinidas = [
     const osSan = String(osNum || '').trim();
     if (!osSan) return null;
 
-    const url = `https://intranetbackend.acacessorios.local/oficina/ordens-servico/${encodeURIComponent(osSan)}`;
+    const url = `http://intranetbackend.acacessorios.local/oficina/ordens-servico/${encodeURIComponent(osSan)}`;
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 15000);
 
@@ -591,7 +591,7 @@ const pecasPreDefinidas = [
       try {
         const form = new FormData();
         form.append('file', entradaFoto.files[0]);
-        const resp = await fetch('https://intranetbackend.acacessorios.local/oficina/uploads/avarias', {
+        const resp = await fetch('http://intranetbackend.acacessorios.local/oficina/uploads/avarias', {
           method: 'POST',
           body: form,
         });
@@ -1300,15 +1300,15 @@ const pecasPreDefinidas = [
       return await resp.json().catch(() => ({}));
     } catch (err) {
       const online = navigator.onLine;
-      const httpsPage = location.protocol === 'https:';
-      const httpsApi  = url.startsWith('https://');
+      const httpPage = location.protocol === 'http:';
+      const httpApi  = url.startsWith('http://');
 
       let dica = '';
       if (!online) {
         dica = 'Sem conexão com a internet.';
       } else if (err.name === 'AbortError') {
         dica = 'Conexão lenta ou servidor não respondeu (timeout).';
-      } else if (httpsPage && !httpsApi) {
+      } else if (httpPage && !httpApi) {
         dica = 'Bloqueio por conteúdo não seguro (API em HTTP).';
       } else if (url.includes('.local')) {
         dica = 'Host .local não resolvido no celular (DNS/mDNS).';
