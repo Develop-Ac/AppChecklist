@@ -5,7 +5,7 @@ const $  = (s, r=document)=>r.querySelector(s);
 const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
 
 /* ========== Config API (mesma origem via proxy) ========== */
-const API_URL = "http://intranetbackend.acacessorios.local/oficina/checklists";
+const API_URL = "http://oficina-service.acacessorios.local/oficina/checklists";
 
 /* ===== Helpers de tamanho/compactação ===== */
 function approxByteLength(value) {
@@ -200,7 +200,7 @@ const pecasPreDefinidas = [
     const osSan = String(osNum || '').trim();
     if (!osSan) return null;
 
-    const url = `http://intranetbackend.acacessorios.local/oficina/ordens-servico/${encodeURIComponent(osSan)}`;
+    const url = `http://oficina-service.acacessorios.local/oficina/ordens-servico/${encodeURIComponent(osSan)}`;
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 15000);
 
@@ -591,7 +591,7 @@ const pecasPreDefinidas = [
       try {
         const form = new FormData();
         form.append('file', entradaFoto.files[0]);
-        const resp = await fetch('http://intranetbackend.acacessorios.local/oficina/uploads/avarias', {
+        const resp = await fetch('http://oficina-service.acacessorios.local/oficina/uploads/avarias', {
           method: 'POST',
           body: form,
         });
