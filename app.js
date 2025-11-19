@@ -590,11 +590,23 @@ const pecasPreDefinidas = [
     if (entradaFoto?.files?.[0]) {
       try {
         const form = new FormData();
-        form.append('file', entradaFoto.files[0]);
-        const resp = await fetch('http://oficina-service.acacessorios.local/oficina/uploads/avarias', {
-          method: 'POST',
-          body: form,
-        });
+          if (!entradaFoto.files || entradaFoto.files.length === 0) {
+            console.error('Nenhuma imagem selecionada!');
+            alert('Selecione uma imagem antes de enviar.');
+            return;
+          }
+          // Verifica o arquivo
+          const arquivo = entradaFoto.files[0];
+          console.log('Arquivo selecionado:', arquivo);
+          form.append('file', arquivo);
+          // Debug: mostra os dados do FormData
+          for (let pair of form.entries()) {
+            console.log(pair[0]+ ':', pair[1]);
+          }
+          const resp = await fetch('http://oficina-service.acacessorios.local/oficina/uploads/avarias', {
+            method: 'POST',
+            body: form,
+          });
         if (!resp.ok) {
           const t = await resp.text().catch(()=> '');
           throw new Error(`HTTP ${resp.status} – ${t || resp.statusText}`);
