@@ -183,8 +183,8 @@
           <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm mb-8">
             <div class="flex items-center justify-between mb-3">
               <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-sky-50 text-sky-600 text-xs">3D</span>
-                Inspeção 3D
+          <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-sky-50 text-sky-600 text-xs">3D</span>
+          Inspeção 3D
               </h2>
               <span id="model-status" class="badge badge-warn">Carregando…</span>
             </div>
@@ -205,8 +205,24 @@
             <div id="damages-list" class="mt-4 space-y-2"></div>
           </div>
 
+          <!-- Bloco de Fotos 360° do Veículo -->
+          <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm mb-8">
+            <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
+              <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 text-xs">📸</span>
+              Fotos 360° do Veículo
+            </h2>
+            <div class="flex flex-col gap-4 items-center">
+              <input type="file" id="foto360-input" accept="image/*" capture="environment" class="hidden">
+              <button type="button" id="btn-foto360" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-semibold shadow">
+          <span class="text-xl">📷</span> Tirar Foto
+              </button>
+              <div id="fotos360-preview" class="flex flex-wrap gap-3 justify-center"></div>
+              <div id="foto360-status" class="text-sm text-slate-500"></div>
+            </div>
+          </div>
+
           <!-- Combustível -->
-            <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
+          <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
             <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
               <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-amber-50 text-amber-600 text-xs">⛽</span>
               Nível de Combustível
@@ -216,34 +232,34 @@
               <!-- Gauge -->
               <svg id="fuel-gauge" viewBox="0 0 260 150" class="w-full max-w-md">
               <defs>
-                <linearGradient id="fuelGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%"  stop-color="#ef4444"/>
-                <stop offset="50%" stop-color="#f59e0b"/>
-                <stop offset="100%" stop-color="#22c55e"/>
-                </linearGradient>
+          <linearGradient id="fuelGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%"  stop-color="#ef4444"/>
+          <stop offset="50%" stop-color="#f59e0b"/>
+          <stop offset="100%" stop-color="#22c55e"/>
+          </linearGradient>
               </defs>
 
               <path id="arc-track"
-                  d="M 30 120 A 100 100 0 0 1 230 120"
-                  fill="none" stroke="#e5e7eb" stroke-width="14" stroke-linecap="round" />
+            d="M 30 120 A 100 100 0 0 1 230 120"
+            fill="none" stroke="#e5e7eb" stroke-width="14" stroke-linecap="round" />
 
               <path id="arc-fill"
-                  d="M 30 120 A 100 100 0 0 1 230 120"
-                  fill="none" stroke="url(#fuelGrad)" stroke-width="14" stroke-linecap="round"
-                  style="stroke-dasharray: 0 1; stroke-dashoffset: 0;" />
+            d="M 30 120 A 100 100 0 0 1 230 120"
+            fill="none" stroke="url(#fuelGrad)" stroke-width="14" stroke-linecap="round"
+            style="stroke-dasharray: 0 1; stroke-dashoffset: 0;" />
 
               <g font-size="12" fill="#374151" font-weight="600">
-                <text x="30"  y="132" text-anchor="middle">E</text>
-                <text x="130" y="16"  text-anchor="middle">1/2</text>
-                <text x="230" y="132" text-anchor="middle" fill="#047857">F</text>
+          <text x="30"  y="132" text-anchor="middle">E</text>
+          <text x="130" y="16"  text-anchor="middle">1/2</text>
+          <text x="230" y="132" text-anchor="middle" fill="#047857">F</text>
               </g>
 
               <g id="ticks" stroke="#cbd5e1" stroke-width="2"></g>
 
               <circle cx="130" cy="120" r="5" fill="#111827" />
               <g id="needle" transform="rotate(-90,130,120)">
-                <rect x="129" y="30" width="2" height="90" rx="1" fill="#111827"></rect>
-                <circle cx="130" cy="30" r="3" fill="#111827"></circle>
+          <rect x="129" y="30" width="2" height="90" rx="1" fill="#111827"></rect>
+          <circle cx="130" cy="30" r="3" fill="#111827"></circle>
               </g>
               </svg>
 
@@ -257,8 +273,65 @@
               Nível: <span id="fuel-percent" class="font-semibold text-slate-800">0%</span>
               </div>
             </div>
-            </div>
+          </div>
         </section>
+
+        <script>
+        // Fotos 360° do Veículo
+        const btnFoto360 = document.getElementById('btn-foto360');
+        const foto360Input = document.getElementById('foto360-input');
+        const fotos360Preview = document.getElementById('fotos360-preview');
+        const foto360Status = document.getElementById('foto360-status');
+
+        // Lista de keys das fotos 360° (será enviada no bodyApi)
+        window.fotos360Keys = [];
+
+        btnFoto360?.addEventListener('click', () => {
+          foto360Input?.click();
+        });
+
+        foto360Input?.addEventListener('change', async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+
+          foto360Status.textContent = 'Enviando foto...';
+
+          const form = new FormData();
+          form.append('file', file);
+
+          try {
+            const resp = await fetch('http://oficina-service.acacessorios.local/oficina/uploads/checklist', {
+              method: 'POST',
+              body: form
+            });
+            if (!resp.ok) throw new Error('Falha ao enviar foto');
+            const data = await resp.json();
+            if (data.ok && data.key) {
+              // Adiciona key à lista global
+              window.fotos360Keys.push(data.key);
+
+              // Mostra preview
+              const url = URL.createObjectURL(file);
+              const img = document.createElement('img');
+              img.src = url;
+              img.className = 'rounded-xl border border-slate-200 shadow-sm max-h-32';
+              img.title = data.key;
+              fotos360Preview.appendChild(img);
+
+              foto360Status.textContent = 'Foto enviada!';
+            } else {
+              foto360Status.textContent = 'Erro ao enviar foto.';
+            }
+          } catch (err) {
+            foto360Status.textContent = 'Erro ao enviar foto.';
+            console.error(err);
+          } finally {
+            foto360Input.value = '';
+          }
+        });
+
+        // Para uso no envio do checklist, inclua window.fotos360Keys no bodyApi como lista de fotos
+        </script>
 
         <!-- === TELA 3: Checklist + Observações === -->
         <section class="tela hidden" data-tela="3">

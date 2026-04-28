@@ -1249,6 +1249,9 @@ const pecasPreDefinidas = [
 
       assinaturasclienteBase64: payload.assinaturas?.assinaturaClienteBase64 || null,
       assinaturasresponsavelBase64: payload.assinaturas?.assinaturaResponsavelBase64 || null,
+
+      // Keys das fotos 360° tiradas na tela de inspeção
+      fotos360: Array.isArray(window.fotos360Keys) ? [...window.fotos360Keys] : [],
     };
 
     // Se as assinaturas forem base64 reais, compacta:
