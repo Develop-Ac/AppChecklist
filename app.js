@@ -674,7 +674,6 @@ const pecasPreDefinidas = [
   async function startCamera() {
     stopCamera();
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      alert('Câmera não disponível. Acesse o app via HTTPS para usar a câmera.');
       modalCam?.close?.();
       return;
     }
@@ -747,6 +746,11 @@ const pecasPreDefinidas = [
   let camModoDetalhe = false;
 
   window.abrirCameraDetalhe = async () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      // Fallback: abre câmera nativa via input capture (funciona em mobile sem HTTPS)
+      document.getElementById('detail-foto-input')?.click();
+      return;
+    }
     camModoDetalhe = true;
     modalCam?.showModal?.();
     await startCamera();
