@@ -649,7 +649,8 @@ const pecasPreDefinidas = [
   /* ==========================================================
      CÂMERA (getUserMedia) — ALTA QUALIDADE
      ========================================================== */
-  const btnOpenCam   = $('#open-camera');
+  const btnOpenCam      = $('#open-camera');
+  const btnOpenCamDetalhe = $('#detail-btn-camera');
   const modalCam     = $('#camera-modal');
   const btnCloseCam  = $('#close-camera');
   const btnTakePhoto = $('#take-photo');
@@ -747,7 +748,6 @@ const pecasPreDefinidas = [
 
   window.abrirCameraDetalhe = async () => {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      // Fallback: abre câmera nativa via input capture (funciona em mobile sem HTTPS)
       document.getElementById('detail-foto-input')?.click();
       return;
     }
@@ -755,6 +755,16 @@ const pecasPreDefinidas = [
     modalCam?.showModal?.();
     await startCamera();
   };
+
+  btnOpenCamDetalhe?.addEventListener('click', async () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      document.getElementById('detail-foto-input')?.click();
+      return;
+    }
+    camModoDetalhe = true;
+    modalCam?.showModal?.();
+    await startCamera();
+  });
 
   btnOpenCam?.addEventListener('click', async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
