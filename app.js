@@ -742,10 +742,6 @@ const pecasPreDefinidas = [
   let camModoDetalhe = false;
 
   window.abrirCameraDetalhe = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      document.getElementById('detail-foto-input')?.click();
-      return;
-    }
     camModoDetalhe = true;
     modalCam?.showModal?.();
     await startCamera();
