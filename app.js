@@ -756,14 +756,8 @@ const pecasPreDefinidas = [
     await startCamera();
   };
 
-  btnOpenCamDetalhe?.addEventListener('click', async () => {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      document.getElementById('detail-foto-input')?.click();
-      return;
-    }
-    camModoDetalhe = true;
-    modalCam?.showModal?.();
-    await startCamera();
+  btnOpenCamDetalhe?.addEventListener('click', () => {
+    document.getElementById('detail-foto-input')?.click();
   });
 
   btnOpenCam?.addEventListener('click', async () => {
