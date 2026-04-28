@@ -63,8 +63,9 @@ async function compressDataUrl(dataUrl, maxW = 1280, maxH = 1280, quality = 0.65
 /* ==========================================================
    WIZARD (4 telas)
    ========================================================== */
+
 const totalTelas = 4;
-let telaAtual = 1;
+let telaAtual = 0; // Começa na tela inicial (listagem)
 
 function atualizarWizardUI() {
   $$('.tela').forEach(sec=>{
@@ -74,6 +75,10 @@ function atualizarWizardUI() {
   $$('.wizard-steps li').forEach(li=>{
     li.classList.toggle('ativo', Number(li.dataset.step) === telaAtual);
   });
+  const wizardHeader = document.getElementById('wizard-header');
+  if (wizardHeader) {
+    wizardHeader.style.display = (telaAtual === 0) ? 'none' : '';
+  }
   $('#wizard-indice').textContent = String(telaAtual);
   $('#btn-prev').disabled = (telaAtual === 1);
   $('#btn-next').textContent = (telaAtual === totalTelas) ? 'Finalizar' : 'Próximo →';
@@ -93,9 +98,130 @@ function proximaTela() {
   if (telaAtual < totalTelas) irParaTela(telaAtual + 1);
   else window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+
 function telaAnterior() { irParaTela(telaAtual - 1); }
 
+// Estado da paginação/filtro
+let paginaAtual = 1;
+let totalPaginas = 1;
+let filtroPlaca = '';
+const ITENS_POR_PAGINA = 20;
+
+// Função para buscar e exibir checklists com paginação e filtro
+async function carregarChecklists({pagina, placa} = {}) { console.log('carregarChecklists', {pagina, placa});
+  const tbody = document.getElementById('checklists-tbody');
+  const paginacaoInfo = document.getElementById('paginacao-info');
+  const btnAnterior = document.getElementById('btn-pag-anterior');
+  const btnProxima = document.getElementById('btn-pag-proxima');
+  const filtroInput = document.getElementById('filtro-placa');
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="6" class="text-center text-slate-400 py-6">Carregando...</td></tr>`;
+  paginaAtual = pagina || paginaAtual || 1;
+  // Sempre pega o valor atual do input, se existir
+  let placaBusca = (typeof placa === 'string') ? placa : (filtroInput ? filtroInput.value.trim().toUpperCase() : '');
+  filtroPlaca = placaBusca;
+  let url = `http://intranetbackend.acacessorios.local/oficina/checklists?page=${paginaAtual}&perPage=${ITENS_POR_PAGINA}`;
+  if (placaBusca && placaBusca.length > 0) {
+    url += `&search=${encodeURIComponent(placaBusca)}`;
+  }
+  try {
+    const resp = await fetch(url);
+    console.log(url)
+    if (!resp.ok) throw new Error('Erro ao buscar checklists');
+    const json = await resp.json();
+    totalPaginas = json.totalPages || 1;
+    if (!json.data || !Array.isArray(json.data) || json.data.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="text-center text-slate-400 py-6">Nenhum checklist encontrado.</td></tr>`;
+    } else {
+      tbody.innerHTML = json.data.map(item => `
+        <tr class="hover:bg-blue-50 transition cursor-pointer" data-item='${JSON.stringify(item).replace(/'/g, "&#39;")}'>
+          <td class="px-4 py-2 font-mono text-xs">${item.osInterna || '-'}</td>
+          <td class="px-4 py-2">${item.clienteNome || '-'}</td>
+          <td class="px-4 py-2">${item.veiculoNome || '-'}</td>
+          <td class="px-4 py-2">${item.veiculoPlaca || '-'}</td>
+          <td class="px-4 py-2">${item.dataHoraEntrada ? new Date(item.dataHoraEntrada).toLocaleString('pt-BR') : '-'}</td>
+          <td class="px-4 py-2">${item.combustivelPercentual != null ? item.combustivelPercentual + '%' : '-'}</td>
+        </tr>
+      `).join('');
+      // Delega clique nas linhas
+      tbody.querySelectorAll('tr[data-item]').forEach(tr => {
+        tr.addEventListener('click', () => {
+          try { abrirDetalheChecklist(JSON.parse(tr.dataset.item)); } catch(err) { console.error(err); }
+        });
+      });
+    }
+    // Atualiza paginação
+    if (paginacaoInfo) paginacaoInfo.textContent = `Página ${paginaAtual}/${totalPaginas}`;
+    if (btnAnterior) btnAnterior.disabled = paginaAtual <= 1;
+    if (btnProxima) btnProxima.disabled = paginaAtual >= totalPaginas;
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-red-400 py-6">Erro ao carregar checklists</td></tr>`;
+    if (paginacaoInfo) paginacaoInfo.textContent = '';
+    if (btnAnterior) btnAnterior.disabled = true;
+    if (btnProxima) btnProxima.disabled = true;
+    console.error(e);
+  }
+}
+
 document.addEventListener('DOMContentLoaded', ()=>{
+  // Botão Novo (tela inicial)
+  const btnNovo = document.getElementById('btn-novo-checklist');
+  if (btnNovo) {
+    btnNovo.addEventListener('click', () => {
+      telaAtual = 1;
+      atualizarWizardUI();
+    });
+  }
+
+  // Filtro por placa
+  const filtroForm = document.getElementById('filtro-form');
+  const filtroInput = document.getElementById('filtro-placa');
+  if (filtroForm && filtroInput) {
+    filtroForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const placaBusca = filtroInput.value.trim().toUpperCase();
+      paginaAtual = 1;
+      filtroPlaca = placaBusca;
+      console.log('Filtrando por placa:', placaBusca);  
+      await carregarChecklists({pagina: 1, placa: placaBusca});
+    });
+    filtroInput.addEventListener('input', (e) => {
+      filtroInput.value = filtroInput.value.toUpperCase();
+    });
+  }
+
+  // Paginação
+  const btnAnterior = document.getElementById('btn-pag-anterior');
+  const btnProxima = document.getElementById('btn-pag-proxima');
+  if (btnAnterior) { console.log('Adicionando evento ao btnAnterior');
+    btnAnterior.addEventListener('click', () => { console.log('Clique em Anterior, página atual:', paginaAtual);
+      paginaAtual = paginaAtual - 1;
+      carregarChecklists({pagina: paginaAtual});
+    });
+  }
+  if (btnProxima) { console.log('Adicionando evento ao btnProxima');
+    btnProxima.addEventListener('click', () => { console.log('Clique em Próxima, página atual:', paginaAtual, 'total páginas:', totalPaginas);
+      paginaAtual = paginaAtual + 1;
+      carregarChecklists({pagina: paginaAtual });
+    });
+  }
+
+  // Preview da foto no modal de detalhe
+  document.addEventListener('change', (e) => {
+    if (e.target.id === 'detail-foto-input') {
+      const preview = document.getElementById('detail-foto-preview');
+      if (preview && e.target.files && e.target.files[0]) {
+        preview.src = URL.createObjectURL(e.target.files[0]);
+        preview.classList.remove('hidden');
+      }
+    }
+  });
+
+  // Carregar checklists ao abrir
+  if (document.querySelector('[data-tela="0"]')) {
+    carregarChecklists({pagina: 1});
+  }
+
   $('#btn-prev')?.addEventListener('click', telaAnterior);
   $('#btn-next')?.addEventListener('click', proximaTela);
   $$('.wizard-steps li').forEach(li=>{
@@ -103,6 +229,87 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
   atualizarWizardUI();
 });
+
+/* ==========================================================
+   DETALHE DO CHECKLIST + UPLOAD DE FOTO
+   ========================================================== */
+
+function abrirDetalheChecklist(item) {
+  const modal = document.getElementById('checklist-detail-modal');
+  if (!modal) return;
+
+  document.getElementById('detail-os').textContent       = item.osInterna    || '-';
+  document.getElementById('detail-cliente').textContent  = item.clienteNome  || '-';
+  document.getElementById('detail-veiculo').textContent  = item.veiculoNome  || '-';
+  document.getElementById('detail-placa').textContent    = item.veiculoPlaca || '-';
+  document.getElementById('detail-entrada').textContent  = item.dataHoraEntrada
+    ? new Date(item.dataHoraEntrada).toLocaleString('pt-BR') : '-';
+  document.getElementById('detail-combustivel').textContent =
+    item.combustivelPercentual != null ? item.combustivelPercentual + '%' : '-';
+
+  // Guarda o id do checklist no modal para uso no upload
+  modal.dataset.checklistId = item.id;
+
+  // Limpa estado anterior
+  const fotoInput  = document.getElementById('detail-foto-input');
+  const fotoStatus = document.getElementById('detail-foto-status');
+  const fotoPreview = document.getElementById('detail-foto-preview');
+  if (fotoInput)  fotoInput.value  = '';
+  if (fotoStatus) fotoStatus.textContent = '';
+  if (fotoPreview) { fotoPreview.src = ''; fotoPreview.classList.add('hidden'); }
+
+  modal.showModal();
+}
+
+async function enviarFotoChecklist() {
+  const modal      = document.getElementById('checklist-detail-modal');
+  const fotoInput  = document.getElementById('detail-foto-input');
+  const fotoStatus = document.getElementById('detail-foto-status');
+  const btnEnviar  = document.getElementById('detail-btn-foto');
+
+  const checklistId = modal?.dataset?.checklistId;
+  if (!checklistId) { fotoStatus.textContent = 'ID do checklist não encontrado.'; return; }
+  if (!fotoInput?.files?.length) { fotoStatus.textContent = 'Selecione uma foto primeiro.'; return; }
+
+  btnEnviar.disabled = true;
+  fotoStatus.textContent = 'Enviando...';
+  fotoStatus.className = 'text-sm text-slate-500 mt-2';
+
+  try {
+    // 1. Faz upload do arquivo
+    const formData = new FormData();
+    formData.append('file', fotoInput.files[0], fotoInput.files[0].name);
+    const uploadResp = await fetch('http://oficina-service.acacessorios.local/oficina/uploads/checklist', {
+      method: 'POST',
+      body: formData,
+    });
+    if (!uploadResp.ok) throw new Error(`Falha ao fazer upload da foto (${uploadResp.status})`);
+    const uploadJson = await uploadResp.json();
+    const fileName = uploadJson.fileName || uploadJson.key;
+    if (!fileName) throw new Error('Nome do arquivo não retornado');
+
+    // 2. Associa a foto ao checklist
+    // Usa o número da OS em vez do checklistId para associar a foto, pois o serviço de fotos espera isso
+    const fotoResp = await fetch(`http://oficina-service.acacessorios.local/oficina/checklists/${checklistId}/fotos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ foto: fileName }),
+    });
+    if (!fotoResp.ok) throw new Error('Falha ao associar foto ao checklist');
+
+    fotoStatus.textContent = 'Foto enviada com sucesso!';
+    fotoStatus.className = 'text-sm text-emerald-600 mt-2 font-semibold';
+    fotoInput.value = '';
+    const fotoPreview = document.getElementById('detail-foto-preview');
+    if (fotoPreview) { fotoPreview.src = ''; fotoPreview.classList.add('hidden'); }
+  } catch (e) {
+    fotoStatus.textContent = 'Erro: ' + e.message;
+    fotoStatus.className = 'text-sm text-red-500 mt-2';
+    console.error(e);
+  } finally {
+    btnEnviar.disabled = false;
+  }
+}
 
 /* ==========================================================
    HOTSPOTS PREDEFINIDOS
@@ -532,17 +739,31 @@ const pecasPreDefinidas = [
     return null;
   }
 
+  let camModoDetalhe = false;
+
+  window.abrirCameraDetalhe = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      document.getElementById('detail-foto-input')?.click();
+      return;
+    }
+    camModoDetalhe = true;
+    modalCam?.showModal?.();
+    await startCamera();
+  };
+
   btnOpenCam?.addEventListener('click', async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
       entradaFoto?.click?.();
       return;
     }
+    camModoDetalhe = false;
     modalCam?.showModal?.();
     await startCamera();
   });
 
   btnCloseCam?.addEventListener('click', () => {
     stopCamera();
+    camModoDetalhe = false;
     modalCam?.close?.();
   });
 
@@ -559,14 +780,24 @@ const pecasPreDefinidas = [
     const objectUrl = URL.createObjectURL(blob);
     lastObjectURL = objectUrl;
 
-    previsualizacaoFoto.src = objectUrl;
-    previsualizacaoFoto.classList.remove('hidden');
-
-    const file = new File([blob], `avaria-${Date.now()}.jpg`, { type: blob.type || 'image/jpeg' });
+    const file = new File([blob], `foto-${Date.now()}.jpg`, { type: blob.type || 'image/jpeg' });
     const dt = new DataTransfer();
     dt.items.add(file);
-    if (entradaFoto) entradaFoto.files = dt.files;
 
+    if (camModoDetalhe) {
+      // Modo detalhe: coloca no input do modal de detalhe e mostra preview
+      const detailInput   = document.getElementById('detail-foto-input');
+      const detailPreview = document.getElementById('detail-foto-preview');
+      if (detailInput)  detailInput.files = dt.files;
+      if (detailPreview) { detailPreview.src = objectUrl; detailPreview.classList.remove('hidden'); }
+    } else {
+      // Modo avaria normal
+      previsualizacaoFoto.src = objectUrl;
+      previsualizacaoFoto.classList.remove('hidden');
+      if (entradaFoto) entradaFoto.files = dt.files;
+    }
+
+    camModoDetalhe = false;
     stopCamera();
     modalCam?.close?.();
   });

@@ -29,15 +29,14 @@
     <!-- Card principal -->
     <div class="rounded-3xl border border-slate-200/70 bg-white/80 backdrop-blur-xl shadow-[0_10px_40px_rgba(2,6,23,.06)] ring-1 ring-white/60 overflow-hidden">
 
-      <!-- ---------- Cabeçalho ---------- -->
-      <header class="p-6 sm:p-8 bg-gradient-to-r from-slate-50 to-white border-b border-slate-200/60">
+      <!-- ---------- Cabeçalho (wizard) ---------- -->
+      <header id="wizard-header" class="p-6 sm:p-8 bg-gradient-to-r from-slate-50 to-white border-b border-slate-200/60">
         <div class="flex items-center justify-center gap-4 mb-4">
           <img src="https://i.imgur.com/ijnRbkK.png" alt="Logo" class="h-14 w-auto opacity-90">
           <div>
             <h1 class="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight">Checklist de Entrada de Veículo – AC</h1>
           </div>
         </div>
-
         <!-- Stepper / Progresso -->
         <nav class="wizard mt-2">
           <ol class="wizard-steps grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -50,8 +49,44 @@
       </header>
 
       <div class="p-6 sm:p-8">
+        <!-- === TELA INICIAL: Listagem de Checklists === -->
+        <section class="tela" data-tela="0">
+          <div class="flex flex-col gap-4 mb-6">
+            <div class="flex items-center justify-between">
+              <h2 class="text-xl font-bold text-slate-800">Checklists Realizados</h2>
+              <button id="btn-novo-checklist" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg shadow transition">Novo</button>
+            </div>
+            <form id="filtro-form" class="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+              <label class="text-sm font-medium text-slate-700">Filtrar por placa:</label>
+              <input id="filtro-placa" type="text" maxlength="10" placeholder="Digite a placa" class="fl-input w-40 uppercase" style="text-transform:uppercase">
+              <button type="submit" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold px-3 py-1 rounded">Buscar</button>
+            </form>
+          </div>
+          <div id="checklists-list" class="overflow-x-auto rounded-xl border border-slate-200 bg-white/70 shadow-sm">
+            <table class="min-w-full divide-y divide-slate-200">
+              <thead class="bg-slate-50">
+                <tr>
+                  <th class="px-4 py-2 text-left text-xs font-semibold text-slate-600">OS</th>
+                  <th class="px-4 py-2 text-left text-xs font-semibold text-slate-600">Cliente</th>
+                  <th class="px-4 py-2 text-left text-xs font-semibold text-slate-600">Veículo</th>
+                  <th class="px-4 py-2 text-left text-xs font-semibold text-slate-600">Placa</th>
+                  <th class="px-4 py-2 text-left text-xs font-semibold text-slate-600">Entrada</th>
+                  <th class="px-4 py-2 text-left text-xs font-semibold text-slate-600">Combustível</th>
+                </tr>
+              </thead>
+              <tbody id="checklists-tbody" class="divide-y divide-slate-100">
+                <tr><td colspan="6" class="text-center text-slate-400 py-6">Carregando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="flex justify-between items-center mt-4 gap-2" id="paginacao-container">
+            <button id="btn-pag-anterior" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold px-3 py-1 rounded disabled:opacity-50">Anterior</button>
+            <span id="paginacao-info" class="text-sm text-slate-600">Página 1/1</span>
+            <button id="btn-pag-proxima" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold px-3 py-1 rounded disabled:opacity-50">Próxima</button>
+          </div>
+        </section>
         <!-- === TELA 1: OS / Cliente / Veículo === -->
-        <section class="tela" data-tela="1">
+        <section class="tela hidden" data-tela="1">
           <div class="grid grid-cols-1 gap-8">
 
             <!-- OS -->
@@ -305,6 +340,75 @@
       </div>
     </div>
   </div>
+
+  <!-- ---------- Modal Detalhe do Checklist ---------- -->
+  <dialog id="checklist-detail-modal" class="p-0 rounded-2xl overflow-hidden border border-slate-200 w-full max-w-lg backdrop:bg-black/40">
+    <div class="bg-gradient-to-r from-slate-50 to-white p-5 border-b border-slate-200 flex items-center justify-between">
+      <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+        <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-blue-50 text-blue-600 text-xs">OS</span>
+        Detalhe do Checklist
+      </h3>
+      <button type="button" onclick="document.getElementById('checklist-detail-modal').close()" class="h-9 w-9 rounded hover:bg-gray-100 text-slate-500 text-lg">✕</button>
+    </div>
+
+    <div class="p-5 space-y-4">
+      <!-- Infos do checklist -->
+      <div class="grid grid-cols-2 gap-3 text-sm">
+        <div class="rounded-xl bg-slate-50 border border-slate-100 p-3">
+          <p class="text-xs text-slate-500 mb-1">O.S Interna</p>
+          <p id="detail-os" class="font-bold text-slate-800 font-mono">-</p>
+        </div>
+        <div class="rounded-xl bg-slate-50 border border-slate-100 p-3">
+          <p class="text-xs text-slate-500 mb-1">Placa</p>
+          <p id="detail-placa" class="font-bold text-slate-800 uppercase">-</p>
+        </div>
+        <div class="rounded-xl bg-slate-50 border border-slate-100 p-3 col-span-2">
+          <p class="text-xs text-slate-500 mb-1">Cliente</p>
+          <p id="detail-cliente" class="font-semibold text-slate-800">-</p>
+        </div>
+        <div class="rounded-xl bg-slate-50 border border-slate-100 p-3">
+          <p class="text-xs text-slate-500 mb-1">Veículo</p>
+          <p id="detail-veiculo" class="font-semibold text-slate-800">-</p>
+        </div>
+        <div class="rounded-xl bg-slate-50 border border-slate-100 p-3">
+          <p class="text-xs text-slate-500 mb-1">Combustível</p>
+          <p id="detail-combustivel" class="font-semibold text-slate-800">-</p>
+        </div>
+        <div class="rounded-xl bg-slate-50 border border-slate-100 p-3 col-span-2">
+          <p class="text-xs text-slate-500 mb-1">Data/Hora Entrada</p>
+          <p id="detail-entrada" class="font-semibold text-slate-800">-</p>
+        </div>
+      </div>
+
+      <!-- Upload de foto -->
+      <div class="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+        <h4 class="text-sm font-semibold text-slate-700 flex items-center gap-2">
+          <span class="text-base">📷</span> Adicionar Foto
+        </h4>
+        <!-- Input oculto (preenchido pela câmera) -->
+        <input type="file" id="detail-foto-input" accept="image/*" class="hidden">
+
+        <!-- Área de preview / botão tirar foto -->
+        <div id="detail-foto-area" class="flex flex-col items-center gap-3">
+          <button type="button" id="detail-btn-camera"
+            onclick="window.abrirCameraDetalhe()"
+            class="w-full inline-flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-3 px-4 rounded-xl border-2 border-dashed border-slate-300 transition text-sm">
+            <span class="text-xl">📷</span> Tirar Foto
+          </button>
+          <img id="detail-foto-preview" class="hidden rounded-xl max-h-52 w-auto border border-slate-200 shadow-sm"/>
+        </div>
+
+        <button
+          id="detail-btn-foto"
+          type="button"
+          onclick="enviarFotoChecklist()"
+          class="w-full inline-flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-2 px-4 rounded-xl hover:bg-blue-700 transition">
+          Enviar Foto
+        </button>
+        <p id="detail-foto-status" class="text-sm text-slate-500 mt-1"></p>
+      </div>
+    </div>
+  </dialog>
 
   <!-- ---------- Modal de Avaria ---------- -->
   <dialog id="damage-modal" class="p-0 rounded-2xl overflow-hidden border border-slate-200 w-full max-w-md 
