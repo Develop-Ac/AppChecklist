@@ -673,6 +673,11 @@ const pecasPreDefinidas = [
 
   async function startCamera() {
     stopCamera();
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert('Câmera não disponível. Acesse o app via HTTPS para usar a câmera.');
+      modalCam?.close?.();
+      return;
+    }
     try {
       HIGH_CONSTRAINTS.video.facingMode = facingMode;
 
