@@ -7,6 +7,57 @@ const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
 /* ========== Config API (mesma origem via proxy) ========== */
 const API_URL = "http://oficina-service.acacessorios.local/oficina/checklists";
 
+const FOTOS_360_GUIADAS = [
+  {
+    ordem: 1,
+    chave: 'frente',
+    titulo: 'Frente do veiculo',
+    instrucao: 'Tire uma foto centralizada da frente do veiculo.',
+  },
+  {
+    ordem: 2,
+    chave: 'frente_lateral_direita',
+    titulo: 'Frente + lateral direita',
+    instrucao: 'Posicione-se na diagonal dianteira direita, mostrando a frente e a lateral direita.',
+  },
+  {
+    ordem: 3,
+    chave: 'lateral_direita',
+    titulo: 'Lateral direita',
+    instrucao: 'Tire uma foto da lateral direita completa do veiculo.',
+  },
+  {
+    ordem: 4,
+    chave: 'lateral_direita_traseira',
+    titulo: 'Lateral direita + traseira',
+    instrucao: 'Posicione-se na diagonal traseira direita, mostrando a lateral direita e a traseira.',
+  },
+  {
+    ordem: 5,
+    chave: 'traseira',
+    titulo: 'Traseira',
+    instrucao: 'Tire uma foto centralizada da traseira do veiculo.',
+  },
+  {
+    ordem: 6,
+    chave: 'traseira_lateral_esquerda',
+    titulo: 'Traseira + lateral esquerda',
+    instrucao: 'Posicione-se na diagonal traseira esquerda, mostrando a traseira e a lateral esquerda.',
+  },
+  {
+    ordem: 7,
+    chave: 'lateral_esquerda',
+    titulo: 'Lateral esquerda',
+    instrucao: 'Tire uma foto da lateral esquerda completa do veiculo.',
+  },
+  {
+    ordem: 8,
+    chave: 'lateral_esquerda_frente',
+    titulo: 'Lateral esquerda + frente do veiculo',
+    instrucao: 'Posicione-se na diagonal dianteira esquerda, mostrando a lateral esquerda e a frente.',
+  },
+];
+
 /* ===== Helpers de tamanho/compactação ===== */
 function approxByteLength(value) {
   try { return new Blob([typeof value === 'string' ? value : JSON.stringify(value)]).size; }
@@ -64,7 +115,7 @@ async function compressDataUrl(dataUrl, maxW = 1280, maxH = 1280, quality = 0.65
    WIZARD (4 telas)
    ========================================================== */
 
-const totalTelas = 4;
+const totalTelas = 5;
 let telaAtual = 0; // Começa na tela inicial (listagem)
 
 function atualizarWizardUI() {
@@ -79,11 +130,15 @@ function atualizarWizardUI() {
   if (wizardHeader) {
     wizardHeader.style.display = (telaAtual === 0) ? 'none' : '';
   }
+  const wizardNav = document.getElementById('wizard-nav');
+  if (wizardNav) {
+    wizardNav.style.display = (telaAtual === 0) ? 'none' : '';
+  }
   $('#wizard-indice').textContent = String(telaAtual);
   $('#btn-prev').disabled = (telaAtual === 1);
   $('#btn-next').textContent = (telaAtual === totalTelas) ? 'Finalizar' : 'Próximo →';
 
-  if (telaAtual === 4) {
+  if (telaAtual === 5) {
     window.ensureSignaturesReady?.();
     window.renderResumo?.();
   }
@@ -95,6 +150,15 @@ function irParaTela(n) {
 }
 
 function proximaTela() {
+  if (telaAtual === 4 && window.hasFotos360Incompletas?.()) {
+    const faltantes = window.getFotos360MissingTitles?.() || [];
+    const msg = faltantes.length
+      ? `As fotos 360 abaixo ainda estao pendentes:\n- ${faltantes.join('\n- ')}`
+      : 'As 8 fotos 360 sao obrigatorias para concluir o checklist.';
+    alert(msg);
+    return;
+  }
+
   if (telaAtual < totalTelas) irParaTela(telaAtual + 1);
   else window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -168,10 +232,33 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const btnNovo = document.getElementById('btn-novo-checklist');
   if (btnNovo) {
     btnNovo.addEventListener('click', () => {
+      window.resetChecklistUI?.({ silent: true, goToList: false });
       telaAtual = 1;
       atualizarWizardUI();
     });
   }
+
+  const btnVoltarListagem = document.getElementById('btn-voltar-listagem');
+  const modalConfirmExit = document.getElementById('confirm-exit-modal');
+  const btnContinuarChecklist = document.getElementById('btn-continuar-checklist');
+  const btnSairChecklist = document.getElementById('btn-sair-checklist');
+
+  btnVoltarListagem?.addEventListener('click', () => {
+    if (!modalConfirmExit) {
+      window.resetChecklistUI?.({ goToList: true });
+      return;
+    }
+    modalConfirmExit.showModal();
+  });
+
+  btnContinuarChecklist?.addEventListener('click', () => {
+    modalConfirmExit?.close();
+  });
+
+  btnSairChecklist?.addEventListener('click', () => {
+    modalConfirmExit?.close();
+    window.resetChecklistUI?.({ goToList: true });
+  });
 
   // Filtro por placa
   const filtroForm = document.getElementById('filtro-form');
@@ -365,6 +452,181 @@ const pecasPreDefinidas = [
   let avarias = [];
   let indiceEdicao = null;
 
+  // Estado das fotos 360 guiadas
+  const foto360GuidedInput = $('#foto360-guided-input');
+  const fotos360Grid = $('#fotos360-grid');
+  const fotos360Status = $('#foto360-guided-status');
+  const fotos360Progresso = $('#fotos360-progresso');
+  const fotos360ProgressBar = $('#fotos360-progress-bar');
+  const fotos360AtualIndice = $('#fotos360-atual-indice');
+  const fotos360AtualTitulo = $('#fotos360-atual-titulo');
+  const fotos360AtualInstrucao = $('#fotos360-atual-instrucao');
+
+  let foto360TargetKey = null;
+  let fotos360State = FOTOS_360_GUIADAS.reduce((acc, p) => {
+    acc[p.chave] = {
+      ...p,
+      foto: null,
+      status: 'pendente',
+      previewUrl: null,
+    };
+    return acc;
+  }, {});
+
+  function fotos360Pendentes() {
+    return FOTOS_360_GUIADAS.filter((p) => !fotos360State[p.chave]?.foto);
+  }
+
+  function fotos360Capturadas() {
+    return FOTOS_360_GUIADAS.filter((p) => !!fotos360State[p.chave]?.foto).length;
+  }
+
+  function montarFotos360Payload() {
+    return FOTOS_360_GUIADAS
+      .map((p) => {
+        const st = fotos360State[p.chave];
+        if (!st?.foto) return null;
+        return {
+          tipo: 'foto_360',
+          posicao: p.chave,
+          ordem: p.ordem,
+          descricao: p.titulo,
+          foto: st.foto,
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function atualizarCardFotoAtual() {
+    if (!fotos360AtualIndice || !fotos360AtualTitulo || !fotos360AtualInstrucao) return;
+    const pendente = fotos360Pendentes()[0] || FOTOS_360_GUIADAS[FOTOS_360_GUIADAS.length - 1];
+    fotos360AtualIndice.textContent = `Foto ${pendente.ordem} de 8`;
+    fotos360AtualTitulo.textContent = pendente.titulo;
+    fotos360AtualInstrucao.textContent = pendente.instrucao;
+  }
+
+  function badgeStatus(st) {
+    if (st === 'capturada') return '<span class="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">capturada</span>';
+    if (st === 'refeita') return '<span class="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-700">refeita</span>';
+    return '<span class="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-600">pendente</span>';
+  }
+
+  function renderizarFotos360Guiadas() {
+    if (!fotos360Grid) return;
+
+    const capturadas = fotos360Capturadas();
+    const percentual = Math.round((capturadas / FOTOS_360_GUIADAS.length) * 100);
+    if (fotos360Progresso) fotos360Progresso.textContent = `${capturadas}/8 capturadas`;
+    if (fotos360ProgressBar) fotos360ProgressBar.style.width = `${percentual}%`;
+
+    fotos360Grid.innerHTML = FOTOS_360_GUIADAS.map((p) => {
+      const st = fotos360State[p.chave];
+      const temFoto = !!st?.foto;
+      const preview = st?.previewUrl
+        ? `<img src="${st.previewUrl}" class="rounded-lg border border-slate-200 max-h-24 w-auto" alt="Preview ${p.titulo}">`
+        : '<div class="text-xs text-slate-400">Sem foto</div>';
+
+      return `
+        <article class="rounded-xl border border-slate-200 bg-white/70 p-3 space-y-2" data-foto360-item="${p.chave}">
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <p class="text-xs font-semibold text-slate-500">Foto ${p.ordem} de 8</p>
+              <p class="text-sm font-bold text-slate-800">${p.titulo}</p>
+              <p class="text-xs text-slate-600">${p.instrucao}</p>
+            </div>
+            ${badgeStatus(st?.status || 'pendente')}
+          </div>
+          <div>${preview}</div>
+          <button type="button" class="foto360-capturar inline-flex items-center justify-center w-full px-3 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 text-sm font-semibold" data-foto360-key="${p.chave}">
+            ${temFoto ? 'Refazer foto' : 'Capturar foto'}
+          </button>
+        </article>
+      `;
+    }).join('');
+
+    atualizarCardFotoAtual();
+  }
+
+  async function uploadFoto360(file) {
+    const form = new FormData();
+    form.append('file', file);
+    const resp = await fetch('http://oficina-service.acacessorios.local/oficina/uploads/checklist', {
+      method: 'POST',
+      body: form,
+    });
+    if (!resp.ok) throw new Error('Falha ao enviar foto 360.');
+    const data = await resp.json();
+    if (!data?.ok || !data?.key) {
+      throw new Error('Resposta invalida no upload da foto 360.');
+    }
+    return data.key;
+  }
+
+  fotos360Grid?.addEventListener('click', (e) => {
+    const botao = e.target.closest('.foto360-capturar');
+    if (!botao) return;
+    foto360TargetKey = botao.dataset.foto360Key;
+    foto360GuidedInput?.click();
+  });
+
+  foto360GuidedInput?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !foto360TargetKey) return;
+
+    const current = fotos360State[foto360TargetKey];
+    if (!current) return;
+
+    try {
+      if (fotos360Status) fotos360Status.textContent = `Enviando foto da posicao: ${current.titulo}...`;
+      const key = await uploadFoto360(file);
+
+      if (current.previewUrl) {
+        try { URL.revokeObjectURL(current.previewUrl); } catch {}
+      }
+
+      const eraCapturada = !!current.foto;
+      current.foto = key;
+      current.previewUrl = URL.createObjectURL(file);
+      current.status = eraCapturada ? 'refeita' : 'capturada';
+
+      if (fotos360Status) {
+        fotos360Status.textContent = `Foto salva para ${current.titulo}.`;
+      }
+      renderizarFotos360Guiadas();
+    } catch (err) {
+      console.error(err);
+      if (fotos360Status) fotos360Status.textContent = 'Erro ao enviar foto 360. Tente novamente.';
+    } finally {
+      foto360GuidedInput.value = '';
+      foto360TargetKey = null;
+    }
+  });
+
+  function limparFotos360State() {
+    FOTOS_360_GUIADAS.forEach((p) => {
+      const st = fotos360State[p.chave];
+      if (st?.previewUrl) {
+        try { URL.revokeObjectURL(st.previewUrl); } catch {}
+      }
+      fotos360State[p.chave] = {
+        ...p,
+        foto: null,
+        status: 'pendente',
+        previewUrl: null,
+      };
+    });
+
+    if (fotos360Status) fotos360Status.textContent = '';
+    if (foto360GuidedInput) foto360GuidedInput.value = '';
+    foto360TargetKey = null;
+    renderizarFotos360Guiadas();
+  }
+
+  window.getFotos360Payload = montarFotos360Payload;
+  window.hasFotos360Incompletas = () => fotos360Pendentes().length > 0;
+  window.getFotos360MissingTitles = () => fotos360Pendentes().map((p) => `Foto ${p.ordem}: ${p.titulo}`);
+  window.resetFotos360State = limparFotos360State;
+
   /* ---------- Utils ---------- */
   const normalizarOuCima = (v)=>{
     const L = Math.hypot(v?.x||0, v?.y||0, v?.z||0);
@@ -552,9 +814,9 @@ const pecasPreDefinidas = [
     sizeCanvas(document.getElementById('inspector-signature'));
   };
 
-  if (telaAtual === 4) window.ensureSignaturesReady();
+  if (telaAtual === 5) window.ensureSignaturesReady();
   window.addEventListener('resize', ()=> {
-    if (telaAtual === 4) window.ensureSignaturesReady();
+    if (telaAtual === 5) window.ensureSignaturesReady();
   });
 })();
 
@@ -1250,8 +1512,8 @@ const pecasPreDefinidas = [
       assinaturasclienteBase64: payload.assinaturas?.assinaturaClienteBase64 || null,
       assinaturasresponsavelBase64: payload.assinaturas?.assinaturaResponsavelBase64 || null,
 
-      // Keys das fotos 360° tiradas na tela de inspeção
-      fotos360: Array.isArray(window.fotos360Keys) ? [...window.fotos360Keys] : [],
+      // Fotos 360 guiadas com metadados de posicao
+      fotos360: Array.isArray(window.getFotos360Payload?.()) ? window.getFotos360Payload() : [],
     };
 
     // Se as assinaturas forem base64 reais, compacta:
@@ -1286,7 +1548,7 @@ const pecasPreDefinidas = [
   /* ==========================================================
      RESET GERAL
      ========================================================== */
-  function resetChecklistUI() {
+  function resetChecklistUI({ goToList = false, silent = false } = {}) {
     const idsTexto = [
       'os_interna','cli_nome','cli_doc','cli_tel','cli_end',
       'veic_nome','veic_placa','veic_cor','veic_km','obs'
@@ -1314,6 +1576,7 @@ const pecasPreDefinidas = [
 
     avarias = [];
     renderizarListaAvarias();
+    window.resetFotos360State?.();
 
     window.clearSignature?.('customer-signature');
     window.clearSignature?.('inspector-signature');
@@ -1327,11 +1590,34 @@ const pecasPreDefinidas = [
     const wrap = document.getElementById('summary-content');
     if (wrap) wrap.innerHTML = '';
 
-    telaAtual = 1;
+    telaAtual = goToList ? 0 : 1;
     atualizarWizardUI();
 
-    if (statusPost) statusPost.textContent = 'Formulário limpo e pronto para novo checklist.';
+    try {
+      Object.keys(localStorage || {}).forEach((k) => {
+        if (k.startsWith('checklist-') || k.startsWith('oficina-checklist-')) {
+          localStorage.removeItem(k);
+        }
+      });
+      Object.keys(sessionStorage || {}).forEach((k) => {
+        if (k.startsWith('checklist-') || k.startsWith('oficina-checklist-')) {
+          sessionStorage.removeItem(k);
+        }
+      });
+    } catch {}
+
+    if (goToList) {
+      carregarChecklists({ pagina: 1 });
+    }
+
+    if (!silent && statusPost) {
+      statusPost.textContent = goToList
+        ? 'Checklist cancelado e listagem recarregada.'
+        : 'Formulário limpo e pronto para novo checklist.';
+    }
   }
+
+  window.resetChecklistUI = resetChecklistUI;
 
   /* ==========================================================
      Exportações
@@ -1611,4 +1897,5 @@ const pecasPreDefinidas = [
   // Start
   renderizarHotspots();
   renderizarListaAvarias();
+  renderizarFotos360Guiadas();
 })();

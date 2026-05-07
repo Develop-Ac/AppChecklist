@@ -39,11 +39,12 @@
         </div>
         <!-- Stepper / Progresso -->
         <nav class="wizard mt-2">
-          <ol class="wizard-steps grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <ol class="wizard-steps grid grid-cols-2 sm:grid-cols-5 gap-2">
             <li data-step="1" class="ativo text-center py-2 rounded-lg border">Dados</li>
-            <li data-step="2" class="text-center py-2 rounded-lg border">Inspeção</li>
+            <li data-step="2" class="text-center py-2 rounded-lg border">Avarias</li>
             <li data-step="3" class="text-center py-2 rounded-lg border">Checklist</li>
-            <li data-step="4" class="text-center py-2 rounded-lg border">Assinatura</li>
+            <li data-step="4" class="text-center py-2 rounded-lg border">Fotos 360</li>
+            <li data-step="5" class="text-center py-2 rounded-lg border">Assinatura</li>
           </ol>
         </nav>
       </header>
@@ -205,22 +206,6 @@
             <div id="damages-list" class="mt-4 space-y-2"></div>
           </div>
 
-          <!-- Bloco de Fotos 360° do Veículo -->
-          <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm mb-8">
-            <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
-              <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 text-xs">📸</span>
-              Fotos 360° do Veículo
-            </h2>
-            <div class="flex flex-col gap-4 items-center">
-              <input type="file" id="foto360-input" accept="image/*" capture="environment" class="hidden">
-              <button type="button" id="btn-foto360" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-semibold shadow">
-          <span class="text-xl">📷</span> Tirar Foto
-              </button>
-              <div id="fotos360-preview" class="flex flex-wrap gap-3 justify-center"></div>
-              <div id="foto360-status" class="text-sm text-slate-500"></div>
-            </div>
-          </div>
-
           <!-- Combustível -->
           <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
             <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
@@ -276,63 +261,6 @@
           </div>
         </section>
 
-        <script>
-        // Fotos 360° do Veículo
-        const btnFoto360 = document.getElementById('btn-foto360');
-        const foto360Input = document.getElementById('foto360-input');
-        const fotos360Preview = document.getElementById('fotos360-preview');
-        const foto360Status = document.getElementById('foto360-status');
-
-        // Lista de keys das fotos 360° (será enviada no bodyApi)
-        window.fotos360Keys = [];
-
-        btnFoto360?.addEventListener('click', () => {
-          foto360Input?.click();
-        });
-
-        foto360Input?.addEventListener('change', async (e) => {
-          const file = e.target.files[0];
-          if (!file) return;
-
-          foto360Status.textContent = 'Enviando foto...';
-
-          const form = new FormData();
-          form.append('file', file);
-
-          try {
-            const resp = await fetch('http://oficina-service.acacessorios.local/oficina/uploads/checklist', {
-              method: 'POST',
-              body: form
-            });
-            if (!resp.ok) throw new Error('Falha ao enviar foto');
-            const data = await resp.json();
-            if (data.ok && data.key) {
-              // Adiciona key à lista global
-              window.fotos360Keys.push(data.key);
-
-              // Mostra preview
-              const url = URL.createObjectURL(file);
-              const img = document.createElement('img');
-              img.src = url;
-              img.className = 'rounded-xl border border-slate-200 shadow-sm max-h-32';
-              img.title = data.key;
-              fotos360Preview.appendChild(img);
-
-              foto360Status.textContent = 'Foto enviada!';
-            } else {
-              foto360Status.textContent = 'Erro ao enviar foto.';
-            }
-          } catch (err) {
-            foto360Status.textContent = 'Erro ao enviar foto.';
-            console.error(err);
-          } finally {
-            foto360Input.value = '';
-          }
-        });
-
-        // Para uso no envio do checklist, inclua window.fotos360Keys no bodyApi como lista de fotos
-        </script>
-
         <!-- === TELA 3: Checklist + Observações === -->
         <section class="tela hidden" data-tela="3">
           <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
@@ -356,8 +284,36 @@
           </div>
         </section>
 
-        <!-- === TELA 4: Resumo + Assinaturas === -->
+        <!-- === TELA 4: Fotos 360 Guiadas === -->
         <section class="tela hidden" data-tela="4">
+          <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm space-y-4">
+            <div class="flex items-center justify-between gap-3 flex-wrap">
+              <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 text-xs">📸</span>
+                Fotos 360 do Veiculo
+              </h2>
+              <span id="fotos360-progresso" class="text-sm font-semibold text-slate-700">0/8 capturadas</span>
+            </div>
+
+            <div class="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
+              <div id="fotos360-progress-bar" class="h-full bg-indigo-600 transition-all duration-300" style="width:0%"></div>
+            </div>
+
+            <div id="fotos360-atual" class="rounded-xl border border-indigo-200 bg-indigo-50/60 p-4">
+              <p class="text-sm font-semibold text-indigo-900" id="fotos360-atual-indice">Foto 1 de 8</p>
+              <p class="text-base font-bold text-slate-800" id="fotos360-atual-titulo">Frente do veiculo</p>
+              <p class="text-sm text-slate-600" id="fotos360-atual-instrucao">Tire uma foto centralizada da frente do veiculo.</p>
+            </div>
+
+            <input type="file" id="foto360-guided-input" accept="image/*" capture="environment" class="hidden">
+            <div id="foto360-guided-status" class="text-sm text-slate-500"></div>
+
+            <div id="fotos360-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+          </div>
+        </section>
+
+        <!-- === TELA 5: Resumo + Assinaturas === -->
+        <section class="tela hidden" data-tela="5">
           <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
             <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
               <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 text-xs">🔎</span>
@@ -391,7 +347,7 @@
             <div class="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur p-3 sm:p-4 shadow-lg flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
               <button id="send-api"
                 class="inline-flex items-center justify-center gap-2 bg-indigo-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-indigo-700 active:scale-[.99] shadow-[0_12px_24px_rgba(79,70,229,.25)] transition w-full sm:w-auto">
-                Finalizar
+                Concluir checklist
               </button>
 
               <button onclick="window.location.reload()"
@@ -405,10 +361,13 @@
         </section>
 
         <!-- Nav do wizard -->
-        <div class="wizard-nav mt-8 flex items-center justify-between gap-3">
-          <button id="btn-prev" class="btn-nav" disabled>← Anterior</button>
-          <div class="text-sm text-slate-500"><span id="wizard-indice">1</span>/4</div>
-          <button id="btn-next" class="btn-nav">Próximo →</button>
+        <div id="wizard-nav" class="wizard-nav mt-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <button id="btn-voltar-listagem" class="inline-flex items-center justify-center px-4 py-2 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 font-semibold">Cancelar e voltar</button>
+          <div class="flex items-center gap-3 sm:ml-auto">
+            <button id="btn-prev" class="btn-nav" disabled>← Anterior</button>
+            <div class="text-sm text-slate-500"><span id="wizard-indice">1</span>/5</div>
+            <button id="btn-next" class="btn-nav">Próximo →</button>
+          </div>
         </div>
       </div>
     </div>
@@ -558,6 +517,19 @@
       <div class="flex items-center justify-end gap-2">
         <button type="button" id="switch-facing" class="px-4 py-2 rounded border">Trocar câmera</button>
         <button type="button" id="take-photo" class="px-4 py-2 rounded bg-blue-600 text-white">Capturar</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="confirm-exit-modal" class="p-0 rounded-2xl overflow-hidden border border-slate-200 w-full max-w-xl backdrop:bg-black/40">
+    <div class="bg-gradient-to-r from-slate-50 to-white p-5 border-b border-slate-200">
+      <h3 class="text-lg font-bold text-slate-800">Deseja sair do checklist?</h3>
+    </div>
+    <div class="p-5 space-y-4">
+      <p class="text-sm text-slate-700">Você ainda não concluiu este checklist. Ao voltar para a listagem, todas as informações preenchidas até agora serão perdidas. Deseja realmente sair?</p>
+      <div class="flex flex-col sm:flex-row justify-end gap-3">
+        <button type="button" id="btn-continuar-checklist" class="inline-flex items-center justify-center px-4 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 font-semibold">Continuar preenchendo</button>
+        <button type="button" id="btn-sair-checklist" class="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-700 font-semibold">Sair e perder alteracoes</button>
       </div>
     </div>
   </dialog>
