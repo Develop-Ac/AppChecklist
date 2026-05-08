@@ -274,9 +274,57 @@ async function abrirTelaEntregaVeiculo(item) {
   modalEntrega.showModal();
 
   try {
-    const resp = await fetch(`${API_URL}/${encodeURIComponent(item.id)}/entrega`);
-    if (!resp.ok) throw new Error('Falha ao carregar detalhes da entrega.');
-    const data = await resp.json();
+    let resp = await fetch(`${API_URL}/${encodeURIComponent(item.id)}/entrega`);
+    let data = null;
+
+    if (resp.ok) {
+      data = await resp.json();
+    } else if (item?.osInterna) {
+      // Fallback para ambientes onde a rota nova ainda nao foi publicada corretamente.
+      const fallbackResp = await fetch(`${API_URL}/${encodeURIComponent(item.osInterna)}`);
+      if (!fallbackResp.ok) {
+        const txt = await resp.text().catch(() => '');
+        throw new Error(txt || `Falha ao carregar detalhes da entrega (${resp.status}).`);
+      }
+      const fallbackData = await fallbackResp.json();
+      data = {
+        id: fallbackData.id,
+        osInterna: fallbackData.osInterna,
+        dataHoraEntrada: fallbackData.dataHoraEntrada,
+        dataHoraEntrega: fallbackData.dataHoraEntrega,
+        clienteNome: fallbackData.clienteNome,
+        veiculoNome: fallbackData.veiculoNome,
+        veiculoPlaca: fallbackData.veiculoPlaca,
+        combustivelPercentual: fallbackData.combustivelPercentual,
+        checklistItems: fallbackData.ofi_checklists_items || [],
+        avarias: fallbackData.ofi_checklists_avarias || [],
+        fotosAvarias: (fallbackData.ofi_checklists_avarias || []).filter((a) => !!a.fotoBase64).map((a) => ({
+          id: a.id,
+          key: a.fotoBase64,
+          peca: a.peca,
+          tipo: a.tipo,
+          observacoes: a.observacoes,
+          timestamp: a.timestamp,
+        })),
+        fotos360: (fallbackData.ofi_checklists_fotos || []).map((f) => {
+          let parsed = null;
+          try { parsed = f.foto ? JSON.parse(f.foto) : null; } catch {}
+          return {
+            id: f.id,
+            key: parsed?.foto || f.foto,
+            tipo: parsed?.tipo || 'foto_360',
+            posicao: parsed?.posicao || null,
+            ordem: parsed?.ordem || null,
+            descricao: parsed?.descricao || null,
+            timestamp: f.timestamp,
+          };
+        }).filter((f) => !!f.key),
+      };
+    } else {
+      const txt = await resp.text().catch(() => '');
+      throw new Error(txt || `Falha ao carregar detalhes da entrega (${resp.status}).`);
+    }
+
     checklistEntregaAtual = data;
 
     const fotosAvarias = await Promise.all((data.fotosAvarias || []).map(async (f, idx) => ({
@@ -349,11 +397,14 @@ async function abrirTelaEntregaVeiculo(item) {
     deliveryPhotosFlat = [...fotosAvarias, ...fotos360].filter((f) => !!f.url);
     if (submit) submit.disabled = false;
 
-    window.ensureSingleSignatureReady?.('delivery-signature');
-    window.clearSignature?.('delivery-signature');
+    requestAnimationFrame(() => {
+      window.ensureSingleSignatureReady?.('delivery-signature');
+      window.clearSignature?.('delivery-signature');
+    });
   } catch (err) {
-    wrap.innerHTML = '<p class="text-sm text-rose-600">Falha ao abrir tela de entrega.</p>';
-    if (status) status.textContent = String(err?.message || err);
+    const mensagem = String(err?.message || err || 'Erro desconhecido ao abrir entrega.');
+    wrap.innerHTML = `<p class="text-sm text-rose-600">Falha ao abrir tela de entrega.</p><p class="text-xs text-slate-500 mt-2">${sanitizeHtml(mensagem)}</p>`;
+    if (status) status.textContent = mensagem;
   }
 }
 
