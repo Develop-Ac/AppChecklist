@@ -231,18 +231,22 @@ async function resolverUrlFoto(tipo, key) {
   if (!key) return null;
   if (String(key).startsWith('data:image')) return key;
 
-  const endpoint = tipo === 'avaria'
-    ? `${UPLOADS_BASE_URL}/avarias/url`
-    : `${UPLOADS_BASE_URL}/fotos/url`;
+  const endpoints = tipo === 'avaria'
+    ? [`${UPLOADS_BASE_URL}/avarias/url`]
+    : [`${UPLOADS_BASE_URL}/fotos/url`, `${UPLOADS_BASE_URL}/avarias/url`];
 
-  try {
-    const resp = await fetch(`${endpoint}?key=${encodeURIComponent(key)}`);
-    if (!resp.ok) return null;
-    const json = await resp.json();
-    return json?.url || null;
-  } catch {
-    return null;
+  for (const endpoint of endpoints) {
+    try {
+      const resp = await fetch(`${endpoint}?key=${encodeURIComponent(key)}`);
+      if (!resp.ok) continue;
+      const json = await resp.json();
+      if (json?.url) return json.url;
+    } catch {
+      // tenta o proximo endpoint
+    }
   }
+
+  return null;
 }
 
 function atualizarLightboxEntrega() {
