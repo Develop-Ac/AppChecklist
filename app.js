@@ -149,9 +149,37 @@ function irParaTela(n) {
   atualizarWizardUI();
 }
 
+async function finalizarChecklist() {
+  try {
+    travarTela('Salvando checklist... Aguarde.');
+    
+    const body = await montarPayloadParaApi();
+    const resp = await postJson(API_URL, body, { timeoutMs: 20000 });
+    
+    if (!resp) throw new Error('Erro ao salvar o checklist.');
+    
+    // Sucesso: resetar e voltar para listagem
+    resetChecklistUI({ goToList: true, silent: true });
+    irParaTela(0);
+    
+    if (statusPost) statusPost.textContent = 'Checklist salvo com sucesso!';
+  } catch (err) {
+    console.error('[FINALIZAR CHECKLIST]', err);
+    const msg = String(err?.message || err);
+    if (statusPost) statusPost.textContent = msg;
+    alert(`Erro ao salvar checklist: ${msg}`);
+    // Manter na tela 4 (não redireciona)
+  } finally {
+    destravarTela();
+  }
+}
+
 function proximaTela() {
-  if (telaAtual < totalTelas) irParaTela(telaAtual + 1);
-  else window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (telaAtual < totalTelas) {
+    irParaTela(telaAtual + 1);
+  } else {
+    finalizarChecklist();
+  }
 }
 
 function telaAnterior() { irParaTela(telaAtual - 1); }
@@ -1115,6 +1143,9 @@ const pecasPreDefinidas = [
     let fotoKeyFromUpload = null;
     let fotoPreviewUrl = null;
 
+    // Fechar modal ANTES de fazer upload (assim o loading overlay fica visível)
+    modalAvaria.close();
+
     try {
       // Se houver arquivo selecionado ou foto capturada, fazemos upload para o backend de uploads,
       // que trata a compressão e sobe no MinIO, retornando a `key`.
@@ -1184,7 +1215,6 @@ const pecasPreDefinidas = [
 
       console.log('[AVARIA - registro inserido]', registro);
       renderizarListaAvarias();
-      modalAvaria.close();
     } finally {
       uploadAvariaEmAndamento = false;
     }
