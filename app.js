@@ -258,7 +258,9 @@ function atualizarLightboxEntrega() {
 
 function extrairMetaFoto360(origem, idx = 0) {
   const raw = origem?.foto ?? origem?.key ?? origem?.fileName ?? null;
+  const tipoFotoRaw = origem?.tipo_foto ?? null;
   let parsed = null;
+  let parsedTipoFoto = null;
 
   if (raw && typeof raw === 'string') {
     try {
@@ -268,6 +270,16 @@ function extrairMetaFoto360(origem, idx = 0) {
     }
   } else if (raw && typeof raw === 'object') {
     parsed = raw;
+  }
+
+  if (tipoFotoRaw && typeof tipoFotoRaw === 'string') {
+    try {
+      parsedTipoFoto = JSON.parse(tipoFotoRaw);
+    } catch {
+      parsedTipoFoto = null;
+    }
+  } else if (tipoFotoRaw && typeof tipoFotoRaw === 'object') {
+    parsedTipoFoto = tipoFotoRaw;
   }
 
   const key = typeof origem?.key === 'string' && origem.key.trim()
@@ -285,10 +297,10 @@ function extrairMetaFoto360(origem, idx = 0) {
   return {
     id: origem?.id,
     key,
-    tipo: origem?.tipo || parsed?.tipo || 'foto_360',
-    posicao: origem?.posicao || parsed?.posicao || null,
-    ordem: origem?.ordem || parsed?.ordem || idx + 1,
-    descricao: origem?.descricao || parsed?.descricao || null,
+    tipo: origem?.tipo || parsedTipoFoto?.tipo || parsed?.tipo || 'foto_360',
+    posicao: origem?.posicao || parsedTipoFoto?.posicao || parsed?.posicao || null,
+    ordem: origem?.ordem || parsedTipoFoto?.ordem || parsed?.ordem || idx + 1,
+    descricao: origem?.descricao || parsedTipoFoto?.descricao || parsed?.descricao || null,
     timestamp: origem?.timestamp || null,
   };
 }
