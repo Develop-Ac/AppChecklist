@@ -309,9 +309,16 @@ async function abrirTelaEntregaVeiculo(item) {
         fotos360: (fallbackData.ofi_checklists_fotos || []).map((f) => {
           let parsed = null;
           try { parsed = f.foto ? JSON.parse(f.foto) : null; } catch {}
+          const parsedKey = typeof parsed?.foto === 'string' && parsed.foto.trim()
+            ? parsed.foto.trim()
+            : typeof parsed?.key === 'string' && parsed.key.trim()
+              ? parsed.key.trim()
+              : typeof parsed?.fileName === 'string' && parsed.fileName.trim()
+                ? parsed.fileName.trim()
+                : '';
           return {
             id: f.id,
-            key: parsed?.foto || f.foto,
+            key: parsedKey || f.foto,
             tipo: parsed?.tipo || 'foto_360',
             posicao: parsed?.posicao || null,
             ordem: parsed?.ordem || null,
