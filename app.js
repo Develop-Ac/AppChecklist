@@ -150,15 +150,6 @@ function irParaTela(n) {
 }
 
 function proximaTela() {
-  if (telaAtual === 4 && window.hasFotos360Incompletas?.()) {
-    const faltantes = window.getFotos360MissingTitles?.() || [];
-    const msg = faltantes.length
-      ? `As fotos 360 abaixo ainda estao pendentes:\n- ${faltantes.join('\n- ')}`
-      : 'As 8 fotos 360 sao obrigatorias para concluir o checklist.';
-    alert(msg);
-    return;
-  }
-
   if (telaAtual < totalTelas) irParaTela(telaAtual + 1);
   else window.scrollTo({ top: 0, behavior: 'smooth' });
 }
