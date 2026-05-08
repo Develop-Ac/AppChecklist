@@ -256,6 +256,55 @@ function atualizarLightboxEntrega() {
   }
 }
 
+function extrairMetaFoto360(origem, idx = 0) {
+  const raw = origem?.foto ?? origem?.key ?? origem?.fileName ?? null;
+  let parsed = null;
+
+  if (raw && typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      parsed = null;
+    }
+  } else if (raw && typeof raw === 'object') {
+    parsed = raw;
+  }
+
+  const key = typeof origem?.key === 'string' && origem.key.trim()
+    ? origem.key.trim()
+    : typeof parsed?.foto === 'string' && parsed.foto.trim()
+      ? parsed.foto.trim()
+      : typeof parsed?.key === 'string' && parsed.key.trim()
+        ? parsed.key.trim()
+        : typeof parsed?.fileName === 'string' && parsed.fileName.trim()
+          ? parsed.fileName.trim()
+          : typeof raw === 'string' && raw.trim() && !raw.trim().startsWith('{')
+            ? raw.trim()
+            : '';
+
+  return {
+    id: origem?.id,
+    key,
+    tipo: origem?.tipo || parsed?.tipo || 'foto_360',
+    posicao: origem?.posicao || parsed?.posicao || null,
+    ordem: origem?.ordem || parsed?.ordem || idx + 1,
+    descricao: origem?.descricao || parsed?.descricao || null,
+    timestamp: origem?.timestamp || null,
+  };
+}
+
+function normalizarFotos360Entrega(payload) {
+  if (Array.isArray(payload?.fotos360) && payload.fotos360.length) {
+    return payload.fotos360.map((foto, idx) => extrairMetaFoto360(foto, idx)).filter((foto) => !!foto.key);
+  }
+
+  if (Array.isArray(payload?.ofi_checklists_fotos) && payload.ofi_checklists_fotos.length) {
+    return payload.ofi_checklists_fotos.map((foto, idx) => extrairMetaFoto360(foto, idx)).filter((foto) => !!foto.key);
+  }
+
+  return [];
+}
+
 async function abrirTelaEntregaVeiculo(item) {
   if (!item?.id) return;
 
@@ -306,26 +355,7 @@ async function abrirTelaEntregaVeiculo(item) {
           observacoes: a.observacoes,
           timestamp: a.timestamp,
         })),
-        fotos360: (fallbackData.ofi_checklists_fotos || []).map((f) => {
-          let parsed = null;
-          try { parsed = f.foto ? JSON.parse(f.foto) : null; } catch {}
-          const parsedKey = typeof parsed?.foto === 'string' && parsed.foto.trim()
-            ? parsed.foto.trim()
-            : typeof parsed?.key === 'string' && parsed.key.trim()
-              ? parsed.key.trim()
-              : typeof parsed?.fileName === 'string' && parsed.fileName.trim()
-                ? parsed.fileName.trim()
-                : '';
-          return {
-            id: f.id,
-            key: parsedKey || f.foto,
-            tipo: parsed?.tipo || 'foto_360',
-            posicao: parsed?.posicao || null,
-            ordem: parsed?.ordem || null,
-            descricao: parsed?.descricao || null,
-            timestamp: f.timestamp,
-          };
-        }).filter((f) => !!f.key),
+        fotos360: normalizarFotos360Entrega(fallbackData),
       };
     } else {
       const txt = await resp.text().catch(() => '');
@@ -343,7 +373,9 @@ async function abrirTelaEntregaVeiculo(item) {
       url: await resolverUrlFoto('avaria', f.key),
     })));
 
-    const fotos360 = await Promise.all((data.fotos360 || []).map(async (f, idx) => ({
+    const fotos360Base = normalizarFotos360Entrega(data);
+
+    const fotos360 = await Promise.all(fotos360Base.map(async (f, idx) => ({
       tipo: 'foto360',
       titulo: f.descricao || f.posicao || `Foto 360 ${idx + 1}`,
       subtitulo: f.posicao || '',
