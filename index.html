@@ -500,7 +500,7 @@
 
       <div class="flex items-center justify-end gap-3 pt-2 border-t border-slate-200">
         <button type="button" id="cancel-damage" class="inline-flex items-center justify-center px-4 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50">Cancelar</button>
-        <button type="submit" class="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">Salvar</button>
+        <button id="save-damage" type="button" class="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">Salvar</button>
       </div>
     </form>
   </dialog>
@@ -533,6 +533,13 @@
       </div>
     </div>
   </dialog>
+
+  <div id="global-loading-overlay" class="global-loading-overlay hidden" aria-live="polite" aria-busy="true">
+    <div class="global-loading-content">
+      <div class="global-loading-spinner" aria-hidden="true"></div>
+      <p id="global-loading-message" class="global-loading-message">Enviando foto... Aguarde.</p>
+    </div>
+  </div>
 
   <!-- Lógica do app -->
   <script src="app.js"></script>

@@ -425,12 +425,15 @@ const pecasPreDefinidas = [
 
   const modalAvaria        = $('#damage-modal');
   const formularioAvaria   = $('#damage-form');
+  const botaoSalvarAvaria  = $('#save-damage');
   const entradaPosicao3d   = $('#damage-3d-pos');
   const entradaNormal3d    = $('#damage-3d-norm');
   const entradaPeca        = $('#damage-part');
   const entradaObservacoes = $('#damage-notes');
   const entradaFoto        = $('#damage-photo');
   const previsualizacaoFoto= $('#photo-preview');
+  const loadingOverlay     = $('#global-loading-overlay');
+  const loadingMessage     = $('#global-loading-message');
 
   const botaoGerarPdf      = $('#generate-pdf');
   const botaoGerarJson     = $('#generate-json');
@@ -442,6 +445,26 @@ const pecasPreDefinidas = [
   /** @type {{pos3d:{x:number,y:number,z:number}, norm3d:{x:number,y:number,z:number}, type:string, part:string, notes:string, fotoBase64?:string, timestamp:number}[]} */
   let avarias = [];
   let indiceEdicao = null;
+  let lockTelaContador = 0;
+  let uploadAvariaEmAndamento = false;
+  let uploadFoto360EmAndamento = false;
+
+  function travarTela(msg = 'Enviando foto... Aguarde.') {
+    lockTelaContador += 1;
+    if (loadingMessage) loadingMessage.textContent = msg;
+    if (loadingOverlay) loadingOverlay.classList.remove('hidden');
+  }
+
+  function destravarTela() {
+    lockTelaContador = Math.max(0, lockTelaContador - 1);
+    if (lockTelaContador === 0 && loadingOverlay) {
+      loadingOverlay.classList.add('hidden');
+    }
+  }
+
+  function telaTravada() {
+    return lockTelaContador > 0;
+  }
 
   // Estado das fotos 360 guiadas
   const foto360GuidedInput = $('#foto360-guided-input');
@@ -554,6 +577,7 @@ const pecasPreDefinidas = [
   }
 
   fotos360Grid?.addEventListener('click', (e) => {
+    if (telaTravada() || uploadFoto360EmAndamento) return;
     const botao = e.target.closest('.foto360-capturar');
     if (!botao) return;
     foto360TargetKey = botao.dataset.foto360Key;
@@ -563,11 +587,18 @@ const pecasPreDefinidas = [
   foto360GuidedInput?.addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
     if (!file || !foto360TargetKey) return;
+    if (uploadFoto360EmAndamento || telaTravada()) {
+      foto360GuidedInput.value = '';
+      foto360TargetKey = null;
+      return;
+    }
 
     const current = fotos360State[foto360TargetKey];
     if (!current) return;
+    uploadFoto360EmAndamento = true;
 
     try {
+      travarTela('Enviando foto... Aguarde.');
       if (fotos360Status) fotos360Status.textContent = `Enviando foto da posicao: ${current.titulo}...`;
       const key = await uploadFoto360(file);
 
@@ -588,6 +619,8 @@ const pecasPreDefinidas = [
       console.error(err);
       if (fotos360Status) fotos360Status.textContent = 'Erro ao enviar foto 360. Tente novamente.';
     } finally {
+      uploadFoto360EmAndamento = false;
+      destravarTela();
       foto360GuidedInput.value = '';
       foto360TargetKey = null;
     }
@@ -1067,8 +1100,11 @@ const pecasPreDefinidas = [
   /* ==========================================================
      SUBMIT do formulário de AVARIA — FLUXO COM UPLOAD + fotoBase64=key
      ========================================================== */
-  formularioAvaria?.addEventListener('submit', async (e)=>{
-    e.preventDefault();
+  async function salvarAvaria(e) {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+    if (uploadAvariaEmAndamento || telaTravada()) return;
+    uploadAvariaEmAndamento = true;
 
     const pos   = JSON.parse(entradaPosicao3d.value||'{}');
     const norm  = JSON.parse(entradaNormal3d.value||'{}');
@@ -1077,67 +1113,85 @@ const pecasPreDefinidas = [
     const notas = entradaObservacoes.value     || '';
 
     let fotoKeyFromUpload = null;
+    let fotoPreviewUrl = null;
 
-    // Se houver arquivo selecionado ou foto capturada, fazemos upload para o backend de uploads,
-    // que trata a compressão e sobe no MinIO, retornando a `key`.
-    if (entradaFoto?.files?.[0]) {
-      try {
-        const form = new FormData();
+    try {
+      // Se houver arquivo selecionado ou foto capturada, fazemos upload para o backend de uploads,
+      // que trata a compressão e sobe no MinIO, retornando a `key`.
+      if (entradaFoto?.files?.[0]) {
+        try {
+          travarTela('Enviando foto... Aguarde.');
+          const form = new FormData();
           if (!entradaFoto.files || entradaFoto.files.length === 0) {
             console.error('Nenhuma imagem selecionada!');
             alert('Selecione uma imagem antes de enviar.');
             return;
           }
-          // Verifica o arquivo
           const arquivo = entradaFoto.files[0];
+          fotoPreviewUrl = URL.createObjectURL(arquivo);
           console.log('Arquivo selecionado:', arquivo);
           form.append('file', arquivo);
-          // Debug: mostra os dados do FormData
+
           for (let pair of form.entries()) {
             console.log(pair[0]+ ':', pair[1]);
           }
+
           const resp = await fetch('http://oficina-service.acacessorios.local/oficina/uploads/avarias', {
             method: 'POST',
             body: form,
           });
-        if (!resp.ok) {
-          const t = await resp.text().catch(()=> '');
-          throw new Error(`HTTP ${resp.status} – ${t || resp.statusText}`);
+          if (!resp.ok) {
+            const t = await resp.text().catch(()=> '');
+            throw new Error(`HTTP ${resp.status} – ${t || resp.statusText}`);
+          }
+
+          const data = await resp.json();
+          console.log('[UPLOAD /avarias] response:', data);
+          const key = data?.key || data?.fileName || null;
+          console.log('[UPLOAD /avarias] key escolhida:', key);
+          fotoKeyFromUpload = key;
+        } catch (err) {
+          console.error('[UPLOAD /avarias] falha no upload:', err);
+          if (fotoPreviewUrl) {
+            try { URL.revokeObjectURL(fotoPreviewUrl); } catch {}
+          }
+          alert('Falha ao enviar a foto da avaria. Tente novamente.');
+          return;
+        } finally {
+          destravarTela();
         }
-        const data = await resp.json();
-        console.log('[UPLOAD /avarias] response:', data);
-        const key = data?.key || data?.fileName || null;
-        console.log('[UPLOAD /avarias] key escolhida:', key);
-        fotoKeyFromUpload = key;
-      } catch (err) {
-        console.error('[UPLOAD /avarias] falha no upload:', err);
-        alert('Falha ao enviar a foto da avaria. Tente novamente.');
-        return;
       }
-    }
 
-    // Monta o registro de avaria. IMPORTANTE:
-    // Agora o backend espera `fotoBase64`. Vamos enviar a KEY no campo `fotoBase64`.
-    // (Seu backend passará a armazenar esse valor; o nome do campo permanece o mesmo.)
-    const registro = {
-      pos3d: pos,
-      norm3d: norm,
-      type: tipo,
-      part: peca,
-      notes: notas,
-      fotoBase64: fotoKeyFromUpload || null, // <<< aqui vai a KEY
-      timestamp: Date.now()
-    };
+      const registro = {
+        pos3d: pos,
+        norm3d: norm,
+        type: tipo,
+        part: peca,
+        notes: notas,
+        fotoBase64: fotoKeyFromUpload || null,
+        fotoPreviewUrl,
+        timestamp: Date.now()
+      };
 
-    if (indiceEdicao !== null) {
-      avarias[indiceEdicao] = { ...avarias[indiceEdicao], ...registro };
-    } else {
-      avarias.push(registro);
+      if (indiceEdicao !== null) {
+        if (avarias[indiceEdicao]?.fotoPreviewUrl && avarias[indiceEdicao].fotoPreviewUrl !== fotoPreviewUrl) {
+          try { URL.revokeObjectURL(avarias[indiceEdicao].fotoPreviewUrl); } catch {}
+        }
+        avarias[indiceEdicao] = { ...avarias[indiceEdicao], ...registro };
+      } else {
+        avarias.push(registro);
+      }
+
+      console.log('[AVARIA - registro inserido]', registro);
+      renderizarListaAvarias();
+      modalAvaria.close();
+    } finally {
+      uploadAvariaEmAndamento = false;
     }
-    console.log('[AVARIA - registro inserido]', registro);
-    renderizarListaAvarias();
-    modalAvaria.close();
-  });
+  }
+
+  formularioAvaria?.addEventListener('submit', salvarAvaria);
+  botaoSalvarAvaria?.addEventListener('click', salvarAvaria);
 
   function renderizarListaAvarias(){
     if (!listaAvarias) return;
@@ -1155,13 +1209,20 @@ const pecasPreDefinidas = [
           <p class="font-semibold text-slate-800">${i+1}. <span class="font-medium">${d.part || 'Peça'}</span> – ${d.type}${coords}</p>
           <p class="text-sm text-slate-500">${d.notes || 'Sem observações.'}</p>
           ${d.fotoBase64 ? `<p class="text-xs text-slate-400 break-all">fotoBase64 (key): ${d.fotoBase64}</p>` : ''}
+          ${d.fotoPreviewUrl ? `<img src="${d.fotoPreviewUrl}" alt="Foto da avaria ${i+1}" class="mt-2 rounded-lg border border-slate-200 max-h-32 w-auto">` : ''}
         </div>
         <div class="flex items-center gap-3">
           <button class="editar text-blue-600 hover:text-blue-800 text-sm">Editar</button>
           <button class="excluir text-rose-600 hover:text-rose-700 font-bold text-xl">&times;</button>
         </div>`;
       linha.querySelector('.editar').onclick = ()=> abrirModalParaEdicao(i);
-      linha.querySelector('.excluir').onclick= ()=>{ avarias.splice(i,1); renderizarListaAvarias(); };
+      linha.querySelector('.excluir').onclick= ()=>{
+        if (avarias[i]?.fotoPreviewUrl) {
+          try { URL.revokeObjectURL(avarias[i].fotoPreviewUrl); } catch {}
+        }
+        avarias.splice(i,1);
+        renderizarListaAvarias();
+      };
       listaAvarias.appendChild(linha);
     });
   }
@@ -1565,6 +1626,11 @@ const pecasPreDefinidas = [
       sel.value = ok ? ok.value : sel.options[0]?.value;
     });
 
+    avarias.forEach((d) => {
+      if (d?.fotoPreviewUrl) {
+        try { URL.revokeObjectURL(d.fotoPreviewUrl); } catch {}
+      }
+    });
     avarias = [];
     renderizarListaAvarias();
     window.resetFotos360State?.();
