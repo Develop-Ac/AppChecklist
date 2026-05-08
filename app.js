@@ -476,6 +476,34 @@ async function abrirTelaEntregaVeiculo(item) {
   }
 }
 
+function assinaturaCanvasVazio(canvas) {
+  if (typeof window.canvasVazio === 'function') {
+    return window.canvasVazio(canvas);
+  }
+
+  const ctx = canvas?.getContext?.('2d');
+  if (!ctx) return true;
+
+  const { width, height } = canvas;
+  const data = ctx.getImageData(0, 0, width, height).data;
+  for (let i = 3; i < data.length; i += 4) {
+    if (data[i] !== 0) return false;
+  }
+  return true;
+}
+
+function assinaturaCanvasParaBase64(canvas) {
+  if (typeof window.canvasParaBase64 === 'function') {
+    return window.canvasParaBase64(canvas);
+  }
+
+  try {
+    return canvas?.toDataURL?.('image/png') || null;
+  } catch {
+    return null;
+  }
+}
+
 async function concluirEntregaVeiculo() {
   const assinatura = document.getElementById('delivery-signature');
   const status = document.getElementById('delivery-status');
@@ -485,13 +513,13 @@ async function concluirEntregaVeiculo() {
   if (!checklistEntregaAtual?.id || !assinatura) return;
 
   // Reusa o mesmo criterio de validação da assinatura do checklist.
-  if (canvasVazio(assinatura)) {
+  if (assinaturaCanvasVazio(assinatura)) {
     if (status) status.textContent = 'Assine a retirada do cliente antes de concluir.';
     return;
   }
 
   // Mantém o mesmo formato base (PNG dataURL) e compressão das assinaturas do checklist.
-  let assinaturaBase64 = canvasParaBase64(assinatura);
+  let assinaturaBase64 = assinaturaCanvasParaBase64(assinatura);
   assinaturaBase64 = await compressDataUrl(assinaturaBase64, 1000, 400, 0.7);
   if (submit) submit.disabled = true;
   if (status) status.textContent = '';
