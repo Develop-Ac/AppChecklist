@@ -19,6 +19,7 @@ const API_BASE = APP_CONFIG.API_BASE;
 const INTRANET_API_BASE = APP_CONFIG.INTRANET_API_BASE;
 
 const API_URL = `${API_BASE}/checklists`;
+const IMG_API_URL = `${API_BASE}/img`;
 const UPLOADS_BASE_URL = `${API_BASE}/uploads`;
 const INTRANET_CHECKLISTS_URL = `${INTRANET_API_BASE}/checklists`;
 const ORDEM_SERVICO_BASE_URL = `${API_BASE}/ordens-servico`;
@@ -379,6 +380,18 @@ async function abrirTelaEntregaVeiculo(item) {
     }
 
     checklistEntregaAtual = data;
+
+    try {
+      const fotosResp = await fetch(`${IMG_API_URL}/${encodeURIComponent(data.id)}`);
+      if (fotosResp.ok) {
+        const fotosJson = await fotosResp.json();
+        if (Array.isArray(fotosJson?.fotos)) {
+          data.ofi_checklists_fotos = fotosJson.fotos;
+        }
+      }
+    } catch {
+      // Mantem fallback para o payload atual de entrega.
+    }
 
     const fotosAvarias = await Promise.all((data.fotosAvarias || []).map(async (f, idx) => ({
       tipo: 'avaria',
