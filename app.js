@@ -228,6 +228,31 @@ function sanitizeHtml(texto) {
     .replace(/'/g, '&#39;');
 }
 
+function normalizarStatusChecklist(status) {
+  return String(status || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase();
+}
+
+function checklistEntregue(item) {
+  const status = normalizarStatusChecklist(item?.status);
+  return Boolean(
+    item?.dataHoraEntrega ||
+    status === 'ENTREGUE' ||
+    status === 'ENTREGE' ||
+    status === 'VEICULO ENTREGUE' ||
+    status === 'VEICULO ENTREGE' ||
+    item?.assinaturaRetiradaBase64,
+  );
+}
+
+function checklistFinalizado(item) {
+  const status = normalizarStatusChecklist(item?.status);
+  return !status || status.includes('FINAL') || status === 'CONCLUIDO';
+}
+
 async function resolverUrlFoto(tipo, key) {
   if (!key) return null;
   if (String(key).startsWith('data:image')) return key;
@@ -582,7 +607,7 @@ async function carregarChecklists({pagina, placa} = {}) { console.log('carregarC
           <td class="px-4 py-2">${item.veiculoPlaca || '-'}</td>
           <td class="px-4 py-2">${item.dataHoraEntrada ? new Date(item.dataHoraEntrada).toLocaleString('pt-BR') : '-'}</td>
           <td class="px-4 py-2">${item.combustivelPercentual != null ? item.combustivelPercentual + '%' : '-'}</td>
-          <td class="px-4 py-2">${(item.dataHoraEntrega || String(item.status || '').toUpperCase() === 'ENTREGUE') ? '<span class="text-emerald-700 text-xs font-semibold">Veiculo entregue</span>' : ''}</td>
+          <td class="px-4 py-2">${checklistEntregue(item) ? '<span class="text-emerald-700 text-xs font-semibold">Veiculo entregue</span>' : ''}</td>
         </tr>
       `).join('');
       // Delega clique nas linhas
@@ -760,9 +785,8 @@ function abrirDetalheChecklist(item) {
   if (fotoPreview) { fotoPreview.src = ''; fotoPreview.classList.add('hidden'); }
 
   if (btnEntrega) {
-    const entregue = !!item?.dataHoraEntrega;
-    const statusTexto = String(item?.status || '').toLowerCase();
-    const finalizado = !statusTexto || statusTexto.includes('final') || statusTexto === 'concluido';
+    const entregue = checklistEntregue(item);
+    const finalizado = checklistFinalizado(item);
     btnEntrega.classList.toggle('hidden', entregue || !finalizado);
     btnEntrega.onclick = () => abrirTelaEntregaVeiculo(item);
   }
