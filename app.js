@@ -365,18 +365,15 @@ async function concluirEntregaVeiculo() {
   const msg = document.getElementById('global-loading-message');
   if (!checklistEntregaAtual?.id || !assinatura) return;
 
-  const ctx = assinatura.getContext('2d');
-  const data = ctx.getImageData(0, 0, assinatura.width, assinatura.height).data;
-  let temTraco = false;
-  for (let i = 3; i < data.length; i += 4) {
-    if (data[i] !== 0) { temTraco = true; break; }
-  }
-  if (!temTraco) {
+  // Reusa o mesmo criterio de validação da assinatura do checklist.
+  if (canvasVazio(assinatura)) {
     if (status) status.textContent = 'Assine a retirada do cliente antes de concluir.';
     return;
   }
 
-  const assinaturaBase64 = assinatura.toDataURL('image/png');
+  // Mantém o mesmo formato base (PNG dataURL) e compressão das assinaturas do checklist.
+  let assinaturaBase64 = canvasParaBase64(assinatura);
+  assinaturaBase64 = await compressDataUrl(assinaturaBase64, 1000, 400, 0.7);
   if (submit) submit.disabled = true;
   if (status) status.textContent = '';
   if (msg) msg.textContent = 'Salvando entrega do veículo... Aguarde.';
