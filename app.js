@@ -236,10 +236,33 @@ function normalizarStatusChecklist(status) {
     .toUpperCase();
 }
 
+function obterDataHoraEntrega(item) {
+  return (
+    item?.dataHoraEntrega ||
+    item?.data_hora_entrega ||
+    item?.datahoraentrega ||
+    item?.data_entrega ||
+    item?.dtEntrega ||
+    null
+  );
+}
+
+function possuiDataHoraEntrega(item) {
+  const valor = obterDataHoraEntrega(item);
+  if (!valor) return false;
+
+  if (valor instanceof Date) {
+    return !Number.isNaN(valor.getTime());
+  }
+
+  const parsed = new Date(valor);
+  return !Number.isNaN(parsed.getTime());
+}
+
 function checklistEntregue(item) {
   const status = normalizarStatusChecklist(item?.status);
   return Boolean(
-    item?.dataHoraEntrega ||
+    possuiDataHoraEntrega(item) ||
     status === 'ENTREGUE' ||
     status === 'ENTREGE' ||
     status === 'VEICULO ENTREGUE' ||
@@ -573,6 +596,27 @@ async function concluirEntregaVeiculo() {
   }
 }
 
+async function buscarListaChecklists(pagina, placaBusca) {
+  const params = new URLSearchParams({
+    page: String(pagina),
+    pageSize: String(ITENS_POR_PAGINA),
+  });
+  if (placaBusca) params.set('search', placaBusca);
+
+  const urlOficina = `${API_URL}?${params.toString()}`;
+  const respOficina = await fetch(urlOficina);
+  if (respOficina.ok) {
+    return respOficina.json();
+  }
+
+  const urlIntranet = `${INTRANET_CHECKLISTS_URL}?page=${encodeURIComponent(String(pagina))}&perPage=${encodeURIComponent(String(ITENS_POR_PAGINA))}${placaBusca ? `&search=${encodeURIComponent(placaBusca)}` : ''}`;
+  const respIntranet = await fetch(urlIntranet);
+  if (!respIntranet.ok) {
+    throw new Error('Erro ao buscar checklists');
+  }
+  return respIntranet.json();
+}
+
 // Função para buscar e exibir checklists com paginação e filtro
 async function carregarChecklists({pagina, placa} = {}) { console.log('carregarChecklists', {pagina, placa});
   const tbody = document.getElementById('checklists-tbody');
@@ -586,15 +630,9 @@ async function carregarChecklists({pagina, placa} = {}) { console.log('carregarC
   // Sempre pega o valor atual do input, se existir
   let placaBusca = (typeof placa === 'string') ? placa : (filtroInput ? filtroInput.value.trim().toUpperCase() : '');
   filtroPlaca = placaBusca;
-  let url = `${INTRANET_CHECKLISTS_URL}?page=${paginaAtual}&perPage=${ITENS_POR_PAGINA}`;
-  if (placaBusca && placaBusca.length > 0) {
-    url += `&search=${encodeURIComponent(placaBusca)}`;
-  }
+
   try {
-    const resp = await fetch(url);
-    console.log(url)
-    if (!resp.ok) throw new Error('Erro ao buscar checklists');
-    const json = await resp.json();
+    const json = await buscarListaChecklists(paginaAtual, placaBusca);
     totalPaginas = json.totalPages || 1;
     if (!json.data || !Array.isArray(json.data) || json.data.length === 0) {
       tbody.innerHTML = `<tr><td colspan="7" class="text-center text-slate-400 py-6">Nenhum checklist encontrado.</td></tr>`;
@@ -759,7 +797,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
    DETALHE DO CHECKLIST + UPLOAD DE FOTO
    ========================================================== */
 
-function abrirDetalheChecklist(item) {
+async function abrirDetalheChecklist(item) {
   const modal = document.getElementById('checklist-detail-modal');
   if (!modal) return;
 
@@ -785,8 +823,25 @@ function abrirDetalheChecklist(item) {
   if (fotoPreview) { fotoPreview.src = ''; fotoPreview.classList.add('hidden'); }
 
   if (btnEntrega) {
-    const entregue = checklistEntregue(item);
-    const finalizado = checklistFinalizado(item);
+    let dadosAtualizados = item;
+    if (item?.id) {
+      try {
+        const respEntrega = await fetch(`${API_URL}/${encodeURIComponent(item.id)}/entrega`);
+        if (respEntrega.ok) {
+          const payloadEntrega = await respEntrega.json();
+          dadosAtualizados = {
+            ...item,
+            dataHoraEntrega: payloadEntrega.dataHoraEntrega || item.dataHoraEntrega,
+            assinaturaRetiradaBase64: payloadEntrega.assinaturaRetiradaBase64 || item.assinaturaRetiradaBase64,
+          };
+        }
+      } catch {
+        // Se falhar atualização de status, mantém os dados da listagem.
+      }
+    }
+
+    const entregue = checklistEntregue(dadosAtualizados);
+    const finalizado = checklistFinalizado(dadosAtualizados);
     btnEntrega.classList.toggle('hidden', entregue || !finalizado);
     btnEntrega.onclick = () => abrirTelaEntregaVeiculo(item);
   }
