@@ -4,8 +4,24 @@
 const $  = (s, r=document)=>r.querySelector(s);
 const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
 
-/* ========== Config API (mesma origem via proxy) ========== */
-const API_URL = "http://oficina-service.acacessorios.local/oficina/checklists";
+/* ========== Config API (sobrescrevível via window.APP_CONFIG) ========== */
+const DEFAULT_APP_CONFIG = {
+  API_BASE: 'http://oficina-service.acacessorios.local/oficina',
+  INTRANET_API_BASE: 'http://intranetbackend.acacessorios.local/oficina',
+};
+
+const APP_CONFIG = {
+  ...DEFAULT_APP_CONFIG,
+  ...(window.APP_CONFIG || {}),
+};
+
+const API_BASE = APP_CONFIG.API_BASE;
+const INTRANET_API_BASE = APP_CONFIG.INTRANET_API_BASE;
+
+const API_URL = `${API_BASE}/checklists`;
+const UPLOADS_BASE_URL = `${API_BASE}/uploads`;
+const INTRANET_CHECKLISTS_URL = `${INTRANET_API_BASE}/checklists`;
+const ORDEM_SERVICO_BASE_URL = `${API_BASE}/ordens-servico`;
 
 const FOTOS_360_GUIADAS = [
   {
@@ -145,7 +161,7 @@ function atualizarWizardUI() {
 }
 
 function irParaTela(n) {
-  telaAtual = Math.max(1, Math.min(totalTelas, n));
+  telaAtual = Math.max(0, Math.min(totalTelas, n));
   atualizarWizardUI();
 }
 
@@ -189,6 +205,204 @@ let paginaAtual = 1;
 let totalPaginas = 1;
 let filtroPlaca = '';
 const ITENS_POR_PAGINA = 20;
+let checklistEntregaAtual = null;
+let deliveryPhotosFlat = [];
+let deliveryLightboxIndex = 0;
+
+function formatarDataHora(valor) {
+  if (!valor) return '-';
+  try {
+    return new Date(valor).toLocaleString('pt-BR');
+  } catch {
+    return '-';
+  }
+}
+
+function sanitizeHtml(texto) {
+  return String(texto ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+async function resolverUrlFoto(tipo, key) {
+  if (!key) return null;
+  if (String(key).startsWith('data:image')) return key;
+
+  const endpoint = tipo === 'avaria'
+    ? `${UPLOADS_BASE_URL}/avarias/url`
+    : `${UPLOADS_BASE_URL}/fotos/url`;
+
+  try {
+    const resp = await fetch(`${endpoint}?key=${encodeURIComponent(key)}`);
+    if (!resp.ok) return null;
+    const json = await resp.json();
+    return json?.url || null;
+  } catch {
+    return null;
+  }
+}
+
+function atualizarLightboxEntrega() {
+  if (!deliveryPhotosFlat.length) return;
+  const foto = deliveryPhotosFlat[deliveryLightboxIndex];
+  const img = document.getElementById('delivery-lightbox-image');
+  const caption = document.getElementById('delivery-lightbox-caption');
+  if (img) img.src = foto.url;
+  if (caption) {
+    caption.textContent = `${foto.titulo} | ${formatarDataHora(foto.timestamp)}`;
+  }
+}
+
+async function abrirTelaEntregaVeiculo(item) {
+  if (!item?.id) return;
+
+  const modalDetalhe = document.getElementById('checklist-detail-modal');
+  const modalEntrega = document.getElementById('delivery-modal');
+  const wrap = document.getElementById('delivery-content');
+  const status = document.getElementById('delivery-status');
+  const submit = document.getElementById('delivery-submit');
+  if (!modalEntrega || !wrap) return;
+
+  if (status) status.textContent = '';
+  if (submit) submit.disabled = true;
+  wrap.innerHTML = '<p class="text-sm text-slate-500">Carregando dados da entrega...</p>';
+
+  modalDetalhe?.close();
+  modalEntrega.showModal();
+
+  try {
+    const resp = await fetch(`${API_URL}/${encodeURIComponent(item.id)}/entrega`);
+    if (!resp.ok) throw new Error('Falha ao carregar detalhes da entrega.');
+    const data = await resp.json();
+    checklistEntregaAtual = data;
+
+    const fotosAvarias = await Promise.all((data.fotosAvarias || []).map(async (f, idx) => ({
+      tipo: 'avaria',
+      titulo: `${f.peca || 'Avaria'} ${idx + 1}`,
+      subtitulo: f.tipo || '',
+      timestamp: f.timestamp,
+      key: f.key,
+      url: await resolverUrlFoto('avaria', f.key),
+    })));
+
+    const fotos360 = await Promise.all((data.fotos360 || []).map(async (f, idx) => ({
+      tipo: 'foto360',
+      titulo: f.descricao || f.posicao || `Foto 360 ${idx + 1}`,
+      subtitulo: f.posicao || '',
+      timestamp: f.timestamp,
+      key: f.key,
+      url: await resolverUrlFoto('foto360', f.key),
+    })));
+
+    const itensHtml = (data.checklistItems || []).map((i) => `
+      <div class="flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2 bg-white/70">
+        <span class="text-sm text-slate-700">${sanitizeHtml(i.item || '-')}</span>
+        <span class="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-700">${sanitizeHtml(i.status || '-')}</span>
+      </div>
+    `).join('');
+
+    const montarFotos = (fotos, secao) => {
+      if (!fotos.length) return '<p class="text-sm text-slate-500">Nenhuma foto disponível.</p>';
+      return `<div class="delivery-grid">${fotos.map((f, idx) => `
+        <article class="delivery-thumb">
+          <button type="button" class="delivery-thumb-button" data-delivery-photo="${sanitizeHtml(secao)}:${idx}" ${f.url ? '' : 'disabled'}>
+            ${f.url
+              ? `<img src="${sanitizeHtml(f.url)}" alt="${sanitizeHtml(f.titulo)}">`
+              : '<div class="h-full w-full flex items-center justify-center text-xs text-slate-500">Imagem indisponível</div>'}
+          </button>
+          <div class="delivery-thumb-meta">
+            <p class="font-semibold">${sanitizeHtml(f.titulo)}</p>
+            <p>${sanitizeHtml(f.subtitulo || '-')}</p>
+            <p>${sanitizeHtml(formatarDataHora(f.timestamp))}</p>
+          </div>
+        </article>
+      `).join('')}</div>`;
+    };
+
+    wrap.innerHTML = `
+      <section class="delivery-section">
+        <h4 class="delivery-section-title">Identificação</h4>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          <div><span class="font-semibold text-slate-700">OS:</span> ${sanitizeHtml(data.osInterna || '-')}</div>
+          <div><span class="font-semibold text-slate-700">Placa:</span> ${sanitizeHtml(data.veiculoPlaca || '-')}</div>
+          <div><span class="font-semibold text-slate-700">Cliente:</span> ${sanitizeHtml(data.clienteNome || '-')}</div>
+          <div><span class="font-semibold text-slate-700">Entrada:</span> ${sanitizeHtml(formatarDataHora(data.dataHoraEntrada))}</div>
+        </div>
+      </section>
+      <section class="delivery-section">
+        <h4 class="delivery-section-title">Itens do Checklist</h4>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">${itensHtml || '<p class="text-sm text-slate-500">Sem itens.</p>'}</div>
+      </section>
+      <section class="delivery-section">
+        <h4 class="delivery-section-title">Fotos de Avaria</h4>
+        ${montarFotos(fotosAvarias, 'avaria')}
+      </section>
+      <section class="delivery-section">
+        <h4 class="delivery-section-title">Fotos 360</h4>
+        ${montarFotos(fotos360, 'foto360')}
+      </section>
+    `;
+
+    deliveryPhotosFlat = [...fotosAvarias, ...fotos360].filter((f) => !!f.url);
+    if (submit) submit.disabled = false;
+
+    window.ensureSingleSignatureReady?.('delivery-signature');
+    window.clearSignature?.('delivery-signature');
+  } catch (err) {
+    wrap.innerHTML = '<p class="text-sm text-rose-600">Falha ao abrir tela de entrega.</p>';
+    if (status) status.textContent = String(err?.message || err);
+  }
+}
+
+async function concluirEntregaVeiculo() {
+  const assinatura = document.getElementById('delivery-signature');
+  const status = document.getElementById('delivery-status');
+  const submit = document.getElementById('delivery-submit');
+  const overlay = document.getElementById('global-loading-overlay');
+  const msg = document.getElementById('global-loading-message');
+  if (!checklistEntregaAtual?.id || !assinatura) return;
+
+  const ctx = assinatura.getContext('2d');
+  const data = ctx.getImageData(0, 0, assinatura.width, assinatura.height).data;
+  let temTraco = false;
+  for (let i = 3; i < data.length; i += 4) {
+    if (data[i] !== 0) { temTraco = true; break; }
+  }
+  if (!temTraco) {
+    if (status) status.textContent = 'Assine a retirada do cliente antes de concluir.';
+    return;
+  }
+
+  const assinaturaBase64 = assinatura.toDataURL('image/png');
+  if (submit) submit.disabled = true;
+  if (status) status.textContent = '';
+  if (msg) msg.textContent = 'Salvando entrega do veículo... Aguarde.';
+  if (overlay) overlay.classList.remove('hidden');
+
+  try {
+    const resp = await fetch(`${API_URL}/${encodeURIComponent(checklistEntregaAtual.id)}/entregar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assinaturaRetiradaBase64: assinaturaBase64 }),
+    });
+    if (!resp.ok) {
+      const txt = await resp.text().catch(() => '');
+      throw new Error(txt || 'Falha ao concluir entrega.');
+    }
+
+    document.getElementById('delivery-modal')?.close();
+    await carregarChecklists({ pagina: paginaAtual, placa: filtroPlaca });
+    alert('Entrega do veículo concluída com sucesso.');
+  } catch (err) {
+    if (status) status.textContent = String(err?.message || err);
+  } finally {
+    if (submit) submit.disabled = false;
+    if (overlay) overlay.classList.add('hidden');
+  }
+}
 
 // Função para buscar e exibir checklists com paginação e filtro
 async function carregarChecklists({pagina, placa} = {}) { console.log('carregarChecklists', {pagina, placa});
@@ -198,12 +412,12 @@ async function carregarChecklists({pagina, placa} = {}) { console.log('carregarC
   const btnProxima = document.getElementById('btn-pag-proxima');
   const filtroInput = document.getElementById('filtro-placa');
   if (!tbody) return;
-  tbody.innerHTML = `<tr><td colspan="6" class="text-center text-slate-400 py-6">Carregando...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="7" class="text-center text-slate-400 py-6">Carregando...</td></tr>`;
   paginaAtual = pagina || paginaAtual || 1;
   // Sempre pega o valor atual do input, se existir
   let placaBusca = (typeof placa === 'string') ? placa : (filtroInput ? filtroInput.value.trim().toUpperCase() : '');
   filtroPlaca = placaBusca;
-  let url = `http://intranetbackend.acacessorios.local/oficina/checklists?page=${paginaAtual}&perPage=${ITENS_POR_PAGINA}`;
+  let url = `${INTRANET_CHECKLISTS_URL}?page=${paginaAtual}&perPage=${ITENS_POR_PAGINA}`;
   if (placaBusca && placaBusca.length > 0) {
     url += `&search=${encodeURIComponent(placaBusca)}`;
   }
@@ -214,7 +428,7 @@ async function carregarChecklists({pagina, placa} = {}) { console.log('carregarC
     const json = await resp.json();
     totalPaginas = json.totalPages || 1;
     if (!json.data || !Array.isArray(json.data) || json.data.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" class="text-center text-slate-400 py-6">Nenhum checklist encontrado.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center text-slate-400 py-6">Nenhum checklist encontrado.</td></tr>`;
     } else {
       tbody.innerHTML = json.data.map(item => `
         <tr class="hover:bg-blue-50 transition cursor-pointer" data-item='${JSON.stringify(item).replace(/'/g, "&#39;")}'>
@@ -224,6 +438,7 @@ async function carregarChecklists({pagina, placa} = {}) { console.log('carregarC
           <td class="px-4 py-2">${item.veiculoPlaca || '-'}</td>
           <td class="px-4 py-2">${item.dataHoraEntrada ? new Date(item.dataHoraEntrada).toLocaleString('pt-BR') : '-'}</td>
           <td class="px-4 py-2">${item.combustivelPercentual != null ? item.combustivelPercentual + '%' : '-'}</td>
+          <td class="px-4 py-2">${(item.dataHoraEntrega || String(item.status || '').toUpperCase() === 'ENTREGUE') ? '<span class="text-emerald-700 text-xs font-semibold">Veiculo entregue</span>' : ''}</td>
         </tr>
       `).join('');
       // Delega clique nas linhas
@@ -238,7 +453,7 @@ async function carregarChecklists({pagina, placa} = {}) { console.log('carregarC
     if (btnAnterior) btnAnterior.disabled = paginaAtual <= 1;
     if (btnProxima) btnProxima.disabled = paginaAtual >= totalPaginas;
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-red-400 py-6">Erro ao carregar checklists</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-red-400 py-6">Erro ao carregar checklists</td></tr>`;
     if (paginacaoInfo) paginacaoInfo.textContent = '';
     if (btnAnterior) btnAnterior.disabled = true;
     if (btnProxima) btnProxima.disabled = true;
@@ -328,6 +543,41 @@ document.addEventListener('DOMContentLoaded', ()=>{
     carregarChecklists({pagina: 1});
   }
 
+  document.getElementById('delivery-close')?.addEventListener('click', () => {
+    document.getElementById('delivery-modal')?.close();
+  });
+  document.getElementById('delivery-submit')?.addEventListener('click', concluirEntregaVeiculo);
+
+  const deliveryWrap = document.getElementById('delivery-content');
+  deliveryWrap?.addEventListener('click', (e) => {
+    const target = e.target.closest('[data-delivery-photo]');
+    if (!target) return;
+    const [secao, idxRaw] = String(target.dataset.deliveryPhoto || '').split(':');
+    const idx = Number(idxRaw);
+    if (!Number.isFinite(idx)) return;
+
+    const lista = deliveryPhotosFlat.filter((f) => f.tipo === secao || (secao === 'foto360' && f.tipo === 'foto360'));
+    if (!lista[idx]?.url) return;
+    deliveryPhotosFlat = lista;
+    deliveryLightboxIndex = idx;
+    atualizarLightboxEntrega();
+    document.getElementById('delivery-photo-lightbox')?.showModal();
+  });
+
+  document.getElementById('delivery-lightbox-close')?.addEventListener('click', () => {
+    document.getElementById('delivery-photo-lightbox')?.close();
+  });
+  document.getElementById('delivery-lightbox-prev')?.addEventListener('click', () => {
+    if (!deliveryPhotosFlat.length) return;
+    deliveryLightboxIndex = (deliveryLightboxIndex - 1 + deliveryPhotosFlat.length) % deliveryPhotosFlat.length;
+    atualizarLightboxEntrega();
+  });
+  document.getElementById('delivery-lightbox-next')?.addEventListener('click', () => {
+    if (!deliveryPhotosFlat.length) return;
+    deliveryLightboxIndex = (deliveryLightboxIndex + 1) % deliveryPhotosFlat.length;
+    atualizarLightboxEntrega();
+  });
+
   $('#btn-prev')?.addEventListener('click', telaAnterior);
   $('#btn-next')?.addEventListener('click', proximaTela);
   $$('.wizard-steps li').forEach(li=>{
@@ -360,9 +610,18 @@ function abrirDetalheChecklist(item) {
   const fotoInput  = document.getElementById('detail-foto-input');
   const fotoStatus = document.getElementById('detail-foto-status');
   const fotoPreview = document.getElementById('detail-foto-preview');
+  const btnEntrega = document.getElementById('detail-btn-entregar');
   if (fotoInput)  fotoInput.value  = '';
   if (fotoStatus) fotoStatus.textContent = '';
   if (fotoPreview) { fotoPreview.src = ''; fotoPreview.classList.add('hidden'); }
+
+  if (btnEntrega) {
+    const entregue = !!item?.dataHoraEntrega;
+    const statusTexto = String(item?.status || '').toLowerCase();
+    const finalizado = !statusTexto || statusTexto.includes('final') || statusTexto === 'concluido';
+    btnEntrega.classList.toggle('hidden', entregue || !finalizado);
+    btnEntrega.onclick = () => abrirTelaEntregaVeiculo(item);
+  }
 
   modal.showModal();
 }
@@ -385,7 +644,7 @@ async function enviarFotoChecklist() {
     // 1. Faz upload do arquivo
     const formData = new FormData();
     formData.append('file', fotoInput.files[0], fotoInput.files[0].name);
-    const uploadResp = await fetch('http://oficina-service.acacessorios.local/oficina/uploads/checklist', {
+    const uploadResp = await fetch(`${UPLOADS_BASE_URL}/checklist`, {
       method: 'POST',
       body: formData,
     });
@@ -396,7 +655,7 @@ async function enviarFotoChecklist() {
 
     // 2. Associa a foto ao checklist
     // Usa o número da OS em vez do checklistId para associar a foto, pois o serviço de fotos espera isso
-    const fotoResp = await fetch(`http://oficina-service.acacessorios.local/oficina/checklists/${checklistId}/fotos`, {
+    const fotoResp = await fetch(`${API_URL}/${checklistId}/fotos`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ foto: fileName }),
@@ -592,7 +851,7 @@ const pecasPreDefinidas = [
   async function uploadFoto360(file) {
     const form = new FormData();
     form.append('file', file);
-    const resp = await fetch('http://oficina-service.acacessorios.local/oficina/uploads/checklist', {
+    const resp = await fetch(`${UPLOADS_BASE_URL}/checklist`, {
       method: 'POST',
       body: form,
     });
@@ -721,7 +980,7 @@ const pecasPreDefinidas = [
     const osSan = String(osNum || '').trim();
     if (!osSan) return null;
 
-    const url = `http://oficina-service.acacessorios.local/oficina/ordens-servico/${encodeURIComponent(osSan)}`;
+    const url = `${ORDEM_SERVICO_BASE_URL}/${encodeURIComponent(osSan)}`;
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 15000);
 
@@ -852,6 +1111,7 @@ const pecasPreDefinidas = [
 
   attachDrawHandlers('customer-signature');
   attachDrawHandlers('inspector-signature');
+  attachDrawHandlers('delivery-signature');
 
   window.clearSignature = (id)=>{
     const canvas = document.getElementById(id);
@@ -864,6 +1124,10 @@ const pecasPreDefinidas = [
   window.ensureSignaturesReady = ()=>{
     sizeCanvas(document.getElementById('customer-signature'));
     sizeCanvas(document.getElementById('inspector-signature'));
+  };
+
+  window.ensureSingleSignatureReady = (id)=> {
+    sizeCanvas(document.getElementById(id));
   };
 
   if (telaAtual === 5) window.ensureSignaturesReady();
@@ -1167,7 +1431,7 @@ const pecasPreDefinidas = [
             console.log(pair[0]+ ':', pair[1]);
           }
 
-          const resp = await fetch('http://oficina-service.acacessorios.local/oficina/uploads/avarias', {
+          const resp = await fetch(`${UPLOADS_BASE_URL}/avarias`, {
             method: 'POST',
             body: form,
           });

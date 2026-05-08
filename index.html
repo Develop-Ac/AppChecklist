@@ -73,10 +73,11 @@
                   <th class="px-4 py-2 text-left text-xs font-semibold text-slate-600">Placa</th>
                   <th class="px-4 py-2 text-left text-xs font-semibold text-slate-600">Entrada</th>
                   <th class="px-4 py-2 text-left text-xs font-semibold text-slate-600">Combustível</th>
+                  <th class="px-4 py-2 text-left text-xs font-semibold text-slate-600">Status</th>
                 </tr>
               </thead>
               <tbody id="checklists-tbody" class="divide-y divide-slate-100">
-                <tr><td colspan="6" class="text-center text-slate-400 py-6">Carregando...</td></tr>
+                <tr><td colspan="7" class="text-center text-slate-400 py-6">Carregando...</td></tr>
               </tbody>
             </table>
           </div>
@@ -324,7 +325,7 @@
             <div id="summary-content" class="space-y-6"></div>
 
             <!-- Assinaturas -->
-            <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div class="mt-8 grid grid-cols-1 gap-8 max-w-3xl">
               <div>
                 <label class="block mb-2 font-medium text-slate-700">Assinatura do Cliente</label>
                 <div class="rounded-xl border border-slate-200 bg-white/60 p-3">
@@ -438,6 +439,49 @@
         </button>
         <p id="detail-foto-status" class="text-sm text-slate-500 mt-1"></p>
       </div>
+
+      <button
+        id="detail-btn-entregar"
+        type="button"
+        class="hidden w-full inline-flex items-center justify-center gap-2 bg-emerald-600 text-white font-semibold py-3 px-4 rounded-xl hover:bg-emerald-700 transition">
+        Efetuar Entrega do Veículo
+      </button>
+    </div>
+  </dialog>
+
+  <dialog id="delivery-modal" class="p-0 rounded-2xl overflow-hidden border border-slate-200 w-[min(1100px,95vw)] max-h-[90vh] backdrop:bg-black/40">
+    <div class="bg-gradient-to-r from-slate-50 to-white p-5 border-b border-slate-200 flex items-center justify-between">
+      <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+        <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 text-xs">✅</span>
+        Efetuar Entrega do Veículo
+      </h3>
+      <button type="button" id="delivery-close" class="h-9 w-9 rounded hover:bg-gray-100 text-slate-500 text-lg">✕</button>
+    </div>
+
+    <div id="delivery-content" class="p-5 space-y-6 overflow-y-auto"></div>
+
+    <div class="p-5 border-t border-slate-200 bg-white/95">
+      <label class="block mb-2 font-medium text-slate-700">Assinatura de Retirada do Cliente</label>
+      <div class="rounded-xl border border-slate-200 bg-white/60 p-3">
+        <canvas id="delivery-signature" class="w-full h-40 bg-slate-50 rounded-md cursor-crosshair"></canvas>
+      </div>
+      <div class="mt-2 flex items-center justify-between gap-3">
+        <button type="button" onclick="clearSignature('delivery-signature')" class="text-sm text-slate-600 hover:text-rose-600 transition">Limpar</button>
+        <button id="delivery-submit" type="button" class="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 font-semibold">Concluir Entrega</button>
+      </div>
+      <p id="delivery-status" class="text-sm text-slate-500 mt-2"></p>
+    </div>
+  </dialog>
+
+  <dialog id="delivery-photo-lightbox" class="p-0 rounded-2xl overflow-hidden border border-slate-200 w-[min(1100px,95vw)] backdrop:bg-black/60">
+    <div class="bg-black text-white p-3 flex items-center justify-between gap-3">
+      <button id="delivery-lightbox-prev" type="button" class="px-3 py-1 rounded bg-white/20 hover:bg-white/30">◀</button>
+      <p id="delivery-lightbox-caption" class="text-sm text-center flex-1">Foto</p>
+      <button id="delivery-lightbox-next" type="button" class="px-3 py-1 rounded bg-white/20 hover:bg-white/30">▶</button>
+      <button id="delivery-lightbox-close" type="button" class="h-9 w-9 rounded hover:bg-white/20 text-lg">✕</button>
+    </div>
+    <div class="bg-black p-4">
+      <img id="delivery-lightbox-image" alt="Foto expandida" class="max-h-[75vh] w-auto mx-auto rounded-lg"/>
     </div>
   </dialog>
 
@@ -540,6 +584,9 @@
       <p id="global-loading-message" class="global-loading-message">Enviando foto... Aguarde.</p>
     </div>
   </div>
+
+  <!-- Configuração de endpoints (sobrescrevível por ambiente) -->
+  <script src="app-config.js"></script>
 
   <!-- Lógica do app -->
   <script src="app.js"></script>
