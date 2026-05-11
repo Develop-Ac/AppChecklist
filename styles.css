@@ -273,3 +273,131 @@ input[type="range"]::-moz-range-thumb{
     grid-template-columns: repeat(1, minmax(0, 1fr));
   }
 }
+
+.checklists-list-wrap {
+  overflow-x: hidden;
+}
+
+.listagem-top-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.9rem;
+  padding: 0.15rem 0.15rem 0.35rem;
+}
+
+.listagem-top-header .listagem-top-logo {
+  width: clamp(120px, 13vw, 170px);
+  max-width: 170px;
+  height: auto;
+  object-fit: contain;
+  object-position: left center;
+  flex: 0 0 auto;
+  margin: 0;
+  align-self: center;
+}
+
+.listagem-top-title {
+  margin: 0;
+  font-size: clamp(1.45rem, 2vw, 1.9rem);
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
+
+.listagem-main-card {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 0.95rem;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.9));
+  padding: 0.9rem;
+}
+
+.checklists-list-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.checklists-head-cell {
+  padding: 0.45rem 0.45rem;
+  text-align: left;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+}
+
+.checklists-cell {
+  padding: 0.84rem 0.45rem;
+  font-size: 0.72rem;
+  color: #0f172a;
+  line-height: 1.15;
+  vertical-align: middle;
+}
+
+.checklists-cell-truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.col-os,
+.col-placa,
+.col-combustivel,
+.col-entrada {
+  white-space: nowrap;
+}
+
+.col-cliente {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.checklists-head-cell.col-veiculo,
+.checklists-head-cell.col-placa,
+.checklists-cell.col-veiculo,
+.checklists-cell.col-placa {
+  text-align: center;
+}
+
+.checklists-head-cell.col-status,
+.checklists-cell.col-status {
+  text-align: center;
+}
+
+.checklists-head-cell.col-entrada,
+.checklists-cell.col-entrada {
+  white-space: nowrap;
+}
+
+.delivery-neon-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.16rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid rgba(34, 197, 94, 0.85);
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.22), rgba(22, 163, 74, 0.32));
+  color: #14532d;
+  font-size: 0.63rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  text-shadow: 0 0 8px rgba(74, 222, 128, 0.85);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.45), inset 0 0 10px rgba(74, 222, 128, 0.22);
+  white-space: nowrap;
+}
+
+@media (max-width: 1280px) {
+  .checklists-head-cell {
+    padding: 0.4rem 0.38rem;
+    font-size: 0.64rem;
+  }
+
+  .checklists-cell {
+    padding: 0.36rem 0.38rem;
+    font-size: 0.68rem;
+  }
+}

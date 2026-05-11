@@ -749,7 +749,7 @@ async function carregarChecklists({pagina, placa} = {}) { console.log('carregarC
   const btnProxima = document.getElementById('btn-pag-proxima');
   const filtroInput = document.getElementById('filtro-placa');
   if (!tbody) return;
-  tbody.innerHTML = `<tr><td colspan="7" class="text-center text-slate-400 py-6">Carregando...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="6" class="text-center text-slate-400 py-6">Carregando...</td></tr>`;
   paginaAtual = pagina || paginaAtual || 1;
   // Sempre pega o valor atual do input, se existir
   let placaBusca = (typeof placa === 'string') ? placa : (filtroInput ? filtroInput.value.trim().toUpperCase() : '');
@@ -759,17 +759,16 @@ async function carregarChecklists({pagina, placa} = {}) { console.log('carregarC
     const json = await buscarListaChecklists(paginaAtual, placaBusca);
     totalPaginas = json.totalPages || 1;
     if (!json.data || !Array.isArray(json.data) || json.data.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" class="text-center text-slate-400 py-6">Nenhum checklist encontrado.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="text-center text-slate-400 py-6">Nenhum checklist encontrado.</td></tr>`;
     } else {
       tbody.innerHTML = json.data.map(item => `
         <tr class="hover:bg-blue-50 transition cursor-pointer" data-item='${JSON.stringify(item).replace(/'/g, "&#39;")}'>
-          <td class="px-4 py-2 font-mono text-xs">${item.osInterna || '-'}</td>
-          <td class="px-4 py-2">${item.clienteNome || '-'}</td>
-          <td class="px-4 py-2">${item.veiculoNome || '-'}</td>
-          <td class="px-4 py-2">${item.veiculoPlaca || '-'}</td>
-          <td class="px-4 py-2">${item.dataHoraEntrada ? new Date(item.dataHoraEntrada).toLocaleString('pt-BR') : '-'}</td>
-          <td class="px-4 py-2">${item.combustivelPercentual != null ? item.combustivelPercentual + '%' : '-'}</td>
-          <td class="px-4 py-2">${checklistEntregue(item) ? '<span class="text-emerald-700 text-xs font-semibold">Veiculo entregue</span>' : ''}</td>
+          <td class="checklists-cell col-os font-mono">${item.osInterna || '-'}</td>
+          <td class="checklists-cell col-cliente" title="${sanitizeHtml(item.clienteNome || '-')}">${item.clienteNome || '-'}</td>
+          <td class="checklists-cell col-veiculo checklists-cell-truncate" title="${sanitizeHtml(item.veiculoNome || '-')}">${item.veiculoNome || '-'}</td>
+          <td class="checklists-cell col-placa">${item.veiculoPlaca || '-'}</td>
+          <td class="checklists-cell col-entrada">${item.dataHoraEntrada ? new Date(item.dataHoraEntrada).toLocaleString('pt-BR') : '-'}</td>
+          <td class="checklists-cell col-status">${checklistEntregue(item) ? '<span class="delivery-neon-badge">Veiculo entregue</span>' : ''}</td>
         </tr>
       `).join('');
       // Delega clique nas linhas
@@ -784,7 +783,7 @@ async function carregarChecklists({pagina, placa} = {}) { console.log('carregarC
     if (btnAnterior) btnAnterior.disabled = paginaAtual <= 1;
     if (btnProxima) btnProxima.disabled = paginaAtual >= totalPaginas;
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-red-400 py-6">Erro ao carregar checklists</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-red-400 py-6">Erro ao carregar checklists</td></tr>`;
     if (paginacaoInfo) paginacaoInfo.textContent = '';
     if (btnAnterior) btnAnterior.disabled = true;
     if (btnProxima) btnProxima.disabled = true;
