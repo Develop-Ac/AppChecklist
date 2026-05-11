@@ -23,6 +23,31 @@ const IMG_API_URL = `${API_BASE}/img`;
 const UPLOADS_BASE_URL = `${API_BASE}/uploads`;
 const INTRANET_CHECKLISTS_URL = `${INTRANET_API_BASE}/checklists`;
 const ORDEM_SERVICO_BASE_URL = `${API_BASE}/ordens-servico`;
+const CHECKLIST_DRAFT_KEY = 'oficina-checklist-draft-v1';
+
+function formatDateTimeForCuiaba(date = new Date()) {
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Cuiaba',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(date);
+
+    const map = Object.create(null);
+    for (const p of parts) {
+      if (p.type !== 'literal') map[p.type] = p.value;
+    }
+
+    return `${map.year}-${map.month}-${map.day}T${map.hour}:${map.minute}`;
+  } catch {
+    const fallback = new Date(date.getTime() - (4 * 60 * 60 * 1000));
+    return fallback.toISOString().slice(0, 16);
+  }
+}
 
 const FOTOS_360_GUIADAS = [
   {
@@ -164,6 +189,7 @@ function atualizarWizardUI() {
 function irParaTela(n) {
   telaAtual = Math.max(0, Math.min(totalTelas, n));
   atualizarWizardUI();
+  window.persistChecklistDraft?.();
 }
 
 async function finalizarChecklist() {
@@ -673,9 +699,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const btnNovo = document.getElementById('btn-novo-checklist');
   if (btnNovo) {
     btnNovo.addEventListener('click', () => {
+      window.clearChecklistDraft?.();
       window.resetChecklistUI?.({ silent: true, goToList: false });
       telaAtual = 1;
       atualizarWizardUI();
+      window.persistChecklistDraft?.();
     });
   }
 
@@ -790,7 +818,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
   $$('.wizard-steps li').forEach(li=>{
     li.addEventListener('click', ()=> irParaTela(Number(li.dataset.step)));
   });
-  atualizarWizardUI();
+
+  const restored = window.restoreChecklistDraft?.() === true;
+  if (!restored) {
+    atualizarWizardUI();
+  }
 });
 
 /* ==========================================================
@@ -1186,9 +1218,9 @@ const pecasPreDefinidas = [
     return null;
   }
 
-  // Preencher data/hora inicial
+  // Preencher data/hora inicial com fuso de Cuiaba (UTC-4)
   const entryDt = $('#entry_datetime');
-  if (entryDt) entryDt.value = new Date().toISOString().slice(0,16);
+  if (entryDt) entryDt.value = formatDateTimeForCuiaba();
 
   /* ==========================================================
      AUTO-PREENCHER PELOS DADOS DA O.S
@@ -1805,6 +1837,201 @@ const pecasPreDefinidas = [
     return true;
   }
 
+  function getChecklistDraft() {
+    try {
+      const raw = sessionStorage.getItem(CHECKLIST_DRAFT_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      return parsed;
+    } catch (err) {
+      console.warn('[CHECKLIST DRAFT] Falha ao ler rascunho:', err);
+      return null;
+    }
+  }
+
+  function clearChecklistDraft() {
+    try {
+      sessionStorage.removeItem(CHECKLIST_DRAFT_KEY);
+    } catch (err) {
+      console.warn('[CHECKLIST DRAFT] Falha ao limpar rascunho:', err);
+    }
+  }
+
+  function drawSignatureFromBase64(canvasId, dataUrl) {
+    if (!dataUrl) return;
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+
+    window.ensureSingleSignatureReady?.(canvasId);
+    const ctx = canvas.getContext('2d');
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+    ctx.clearRect(0, 0, canvas.width / ratio, canvas.height / ratio);
+
+    const img = new Image();
+    img.onload = () => {
+      const w = canvas.width / ratio;
+      const h = canvas.height / ratio;
+      ctx.drawImage(img, 0, 0, w, h);
+    };
+    img.src = dataUrl;
+  }
+
+  function collectDraftSnapshot() {
+    if (telaAtual <= 0) return null;
+
+    const idsTexto = [
+      'os_interna','entry_datetime','cli_nome','cli_doc','cli_tel','cli_end',
+      'veic_nome','veic_placa','veic_cor','veic_km','obs'
+    ];
+
+    const campos = {};
+    idsTexto.forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      campos[id] = el.value ?? '';
+    });
+
+    const checklist = $$('#items-checklist select').map((sel) => sel.value || '');
+    const fuelRange = document.getElementById('fuel-range');
+    const combustivel = Number(fuelRange?.value ?? 50);
+
+    const avariasSerializadas = avarias.map((d) => ({
+      pos3d: d.pos3d,
+      norm3d: d.norm3d,
+      type: d.type,
+      part: d.part,
+      notes: d.notes,
+      fotoBase64: d.fotoBase64 || null,
+      timestamp: d.timestamp,
+    }));
+
+    const fotos360 = FOTOS_360_GUIADAS.map((p) => {
+      const st = fotos360State[p.chave] || {};
+      return {
+        chave: p.chave,
+        foto: st.foto || null,
+        status: st.status || (st.foto ? 'capturada' : 'pendente'),
+      };
+    });
+
+    const assinaturaClienteCanvas = document.getElementById('customer-signature');
+    const assinaturaResponsavelCanvas = document.getElementById('inspector-signature');
+
+    const assinaturas = {
+      cliente: assinaturaClienteCanvas && !canvasVazio(assinaturaClienteCanvas)
+        ? canvasParaBase64(assinaturaClienteCanvas)
+        : null,
+      responsavel: assinaturaResponsavelCanvas && !canvasVazio(assinaturaResponsavelCanvas)
+        ? canvasParaBase64(assinaturaResponsavelCanvas)
+        : null,
+    };
+
+    return {
+      versao: 1,
+      telaAtual,
+      campos,
+      checklist,
+      combustivel,
+      avarias: avariasSerializadas,
+      fotos360,
+      assinaturas,
+      atualizadoEm: Date.now(),
+    };
+  }
+
+  function persistChecklistDraft() {
+    const snapshot = collectDraftSnapshot();
+    if (!snapshot) return;
+
+    try {
+      sessionStorage.setItem(CHECKLIST_DRAFT_KEY, JSON.stringify(snapshot));
+    } catch (err) {
+      console.warn('[CHECKLIST DRAFT] Falha ao salvar rascunho:', err);
+    }
+  }
+
+  function restoreChecklistDraft() {
+    const draft = getChecklistDraft();
+    if (!draft || !draft.campos || Number(draft.telaAtual) <= 0) return false;
+
+    Object.entries(draft.campos).forEach(([id, value]) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.value = value ?? '';
+    });
+
+    if (!draft.campos.entry_datetime) {
+      const entry = document.getElementById('entry_datetime');
+      if (entry) entry.value = formatDateTimeForCuiaba();
+    }
+
+    const fuelRange = document.getElementById('fuel-range');
+    if (fuelRange && Number.isFinite(Number(draft.combustivel))) {
+      fuelRange.value = String(Number(draft.combustivel));
+      fuelRange.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    if (Array.isArray(draft.checklist)) {
+      $$('#items-checklist select').forEach((sel, idx) => {
+        if (typeof draft.checklist[idx] === 'string') {
+          sel.value = draft.checklist[idx];
+        }
+      });
+    }
+
+    avarias = Array.isArray(draft.avarias)
+      ? draft.avarias.map((d) => ({ ...d, fotoPreviewUrl: null }))
+      : [];
+    renderizarListaAvarias();
+
+    if (Array.isArray(draft.fotos360)) {
+      draft.fotos360.forEach((item) => {
+        const st = fotos360State[item?.chave];
+        if (!st) return;
+        st.foto = item?.foto || null;
+        st.status = item?.status || (st.foto ? 'capturada' : 'pendente');
+        st.previewUrl = null;
+      });
+      renderizarFotos360Guiadas();
+    }
+
+    window.ensureSignaturesReady?.();
+    drawSignatureFromBase64('customer-signature', draft.assinaturas?.cliente || null);
+    drawSignatureFromBase64('inspector-signature', draft.assinaturas?.responsavel || null);
+
+    irParaTela(Number(draft.telaAtual));
+    return true;
+  }
+
+  let draftSaveTimer = null;
+  function schedulePersistChecklistDraft() {
+    if (draftSaveTimer) clearTimeout(draftSaveTimer);
+    draftSaveTimer = setTimeout(() => {
+      persistChecklistDraft();
+      draftSaveTimer = null;
+    }, 200);
+  }
+
+  document.addEventListener('input', () => {
+    if (telaAtual <= 0) return;
+    schedulePersistChecklistDraft();
+  });
+
+  document.addEventListener('change', () => {
+    if (telaAtual <= 0) return;
+    schedulePersistChecklistDraft();
+  });
+
+  window.addEventListener('beforeunload', () => {
+    if (telaAtual <= 0) return;
+    persistChecklistDraft();
+  });
+
+  window.persistChecklistDraft = persistChecklistDraft;
+  window.restoreChecklistDraft = restoreChecklistDraft;
+  window.clearChecklistDraft = clearChecklistDraft;
+
   async function elementoParaBase64(el){
     const canvas = await html2canvas(el, { scale: 2, useCORS: true });
     return canvas.toDataURL('image/png');
@@ -2129,7 +2356,7 @@ const pecasPreDefinidas = [
     });
 
     const entryDt = document.getElementById('entry_datetime');
-    if (entryDt) entryDt.value = new Date().toISOString().slice(0,16);
+    if (entryDt) entryDt.value = formatDateTimeForCuiaba();
 
     const fuelRange = document.getElementById('fuel-range');
     if (fuelRange) {
@@ -2167,18 +2394,11 @@ const pecasPreDefinidas = [
     telaAtual = goToList ? 0 : 1;
     atualizarWizardUI();
 
-    try {
-      Object.keys(localStorage || {}).forEach((k) => {
-        if (k.startsWith('checklist-') || k.startsWith('oficina-checklist-')) {
-          localStorage.removeItem(k);
-        }
-      });
-      Object.keys(sessionStorage || {}).forEach((k) => {
-        if (k.startsWith('checklist-') || k.startsWith('oficina-checklist-')) {
-          sessionStorage.removeItem(k);
-        }
-      });
-    } catch {}
+    if (goToList) {
+      clearChecklistDraft();
+    } else {
+      persistChecklistDraft();
+    }
 
     if (goToList) {
       carregarChecklists({ pagina: 1 });
