@@ -767,7 +767,7 @@ async function carregarChecklists({pagina, placa} = {}) { console.log('carregarC
           <td class="checklists-cell col-cliente" title="${sanitizeHtml(item.clienteNome || '-')}">${item.clienteNome || '-'}</td>
           <td class="checklists-cell col-veiculo checklists-cell-truncate" title="${sanitizeHtml(item.veiculoNome || '-')}">${item.veiculoNome || '-'}</td>
           <td class="checklists-cell col-placa">${item.veiculoPlaca || '-'}</td>
-          <td class="checklists-cell col-entrada">${item.dataHoraEntrada ? new Date(item.dataHoraEntrada).toLocaleString('pt-BR') : '-'}</td>
+          <td class="checklists-cell col-entrada">${item.dataHoraEntrada ? new Date(item.dataHoraEntrada).toLocaleDateString('pt-BR') : '-'}</td>
           <td class="checklists-cell col-status">${checklistEntregue(item) ? '<span class="delivery-neon-badge">Veiculo entregue</span>' : ''}</td>
         </tr>
       `).join('');
@@ -1461,6 +1461,7 @@ const pecasPreDefinidas = [
   const HOTSPOT_IDS_POR_FACE = {
     lateral_esquerda: [
       'parachoque-diant-esq',
+      'pneu-diant-esq',
       'retrovisor-esq',
       'janela-diant-esq',
       'janela-tras-esq',
@@ -1470,10 +1471,12 @@ const pecasPreDefinidas = [
       'macaneta-tras-esq',
       'traseira-lateral-esq',
       'parachoque-tras-esq',
+      'pneu-tras-esq',
     ],
     traseira: ['vidro-vigia', 'porta-malas', 'parachoque-tras', 'farol-tras-dir', 'farol-tras-esq'],
     lateral_direita: [
       'parachoque-diant-dir',
+      'pneu-diant-dir',
       'retrovisor-dir',
       'janela-diant-dir',
       'janela-tras-dir',
@@ -1483,6 +1486,7 @@ const pecasPreDefinidas = [
       'macaneta-tras-passageiro',
       'traseira-lateral-dir',
       'parachoque-tras-dir',
+      'pneu-tras-dir',
     ],
     frente: ['parachoque-diant', 'parabrisa', 'teto', 'capo', 'farol-diant-dir', 'farol-diant-esq'],
   };

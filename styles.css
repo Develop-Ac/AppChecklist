@@ -363,6 +363,16 @@ input[type="range"]::-moz-range-thumb{
   text-align: center;
 }
 
+.checklists-head-cell.col-veiculo,
+.checklists-cell.col-veiculo {
+  padding-right: 0.75rem;
+}
+
+.checklists-head-cell.col-placa,
+.checklists-cell.col-placa {
+  padding-left: 0.75rem;
+}
+
 .checklists-head-cell.col-status,
 .checklists-cell.col-status {
   text-align: center;
@@ -390,7 +400,46 @@ input[type="range"]::-moz-range-thumb{
   white-space: nowrap;
 }
 
-@media (max-width: 1280px) {
+@media (min-width: 768px) {
+  .tela[data-tela="0"] .listagem-top-title {
+    font-size: 24px;
+    line-height: 1.05;
+  }
+
+  .tela[data-tela="0"] .checklists-head-cell {
+    font-size: 15px;
+    line-height: 1.15;
+  }
+
+  .tela[data-tela="0"] .checklists-cell {
+    font-size: 15px;
+    line-height: 1.25;
+    min-height: 52px;
+  }
+
+  .tela[data-tela="0"] #checklists-tbody tr {
+    min-height: 52px;
+  }
+
+  .tela[data-tela="0"] #checklists-tbody td {
+    min-height: 52px;
+  }
+
+  .tela[data-tela="0"] #btn-novo-checklist,
+  .tela[data-tela="0"] #filtro-form button,
+  .tela[data-tela="0"] #btn-pag-anterior,
+  .tela[data-tela="0"] #btn-pag-proxima {
+    font-size: 14px;
+  }
+
+  .tela[data-tela="0"] #paginacao-info,
+  .tela[data-tela="0"] #filtro-form label,
+  .tela[data-tela="0"] .delivery-neon-badge {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 767px) {
   .checklists-head-cell {
     padding: 0.4rem 0.38rem;
     font-size: 0.64rem;
