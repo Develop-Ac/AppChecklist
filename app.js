@@ -236,6 +236,11 @@ function atualizarWizardUI() {
 function irParaTela(n) {
   telaAtual = Math.max(0, Math.min(totalTelas, n));
   atualizarWizardUI();
+  window.requestAnimationFrame(() => {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  });
   window.persistChecklistDraft?.();
 }
 
