@@ -3,31 +3,50 @@ body{ font-family:'Inter',sans-serif; }
 dialog::backdrop{ background: rgba(15, 23, 42, .55); backdrop-filter: blur(2px); }
 
 /* ---------- Wizard / Stepper ---------- */
-.wizard-steps{
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0,1fr));
-  gap: .5rem;
+.wizard {
+  overflow: visible;
+  padding-bottom: 0;
 }
-.wizard-steps li{
+
+.wizard-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: .4rem;
+  width: 100%;
+}
+
+.wizard-steps li {
   list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3.25rem;
   text-align: center;
-  padding: .5rem .75rem;
+  padding: .5rem .4rem;
   border: 1px solid rgba(148,163,184,.35);
   border-radius: .75rem;
   background: rgba(248,250,252,.7);
   color: #475569;
   font-weight: 600;
-  font-size: .9rem;
   user-select: none;
   cursor: pointer;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+  font-size: .78rem;
+  line-height: 1.15;
+  letter-spacing: -.01em;
 }
+
 .wizard-steps li.ativo{
   background: #2563eb10;
   color: #1d4ed8;
   border-color: rgba(37,99,235,.35);
   box-shadow: 0 4px 12px rgba(37,99,235,.12) inset;
 }
+
 .tela.hidden{ display: none; }
+
 .btn-nav{
   appearance: none;
   background: white;
@@ -132,33 +151,15 @@ input[type="range"]::-moz-range-thumb{
   touch-action: none;
 }
 
-/* 2 por linha no mobile */
-.wizard-steps {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: .5rem; /* espaço entre as etapas */
-}
-
-/* 4 por linha do sm pra cima (~640px) */
-@media (min-width: 640px) {
+@media (min-width: 1024px) {
   .wizard-steps {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
   }
-}
 
-/* opcional: estilo dos itens */
-.wizard-steps li {
-  text-align: center;
-  padding: .5rem .75rem;
-  border-radius: .75rem;
-  border: 1px solid #e2e8f0;
-}
-
-/* estado ativo (ajuste as cores conforme sua paleta) */
-.wizard-steps li.ativo {
-  background: #2563eb;
-  color: #fff;
-  border-color: #2563eb;
+  .wizard-steps li {
+    font-size: .82rem;
+    padding: .6rem .5rem;
+  }
 }
 
 .global-loading-overlay {

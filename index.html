@@ -32,19 +32,21 @@
       <!-- ---------- Cabeçalho (wizard) ---------- -->
       <header id="wizard-header" class="p-6 sm:p-8 bg-gradient-to-r from-slate-50 to-white border-b border-slate-200/60">
         <div class="flex items-center justify-center gap-4 mb-4">
-          <img src="https://i.imgur.com/ijnRbkK.png" alt="Logo" class="h-14 w-auto opacity-90">
+          <img src="icons/logo_completa.png" alt="Logo AC Acessórios" class="h-16 sm:h-20 w-auto max-w-[280px] opacity-95 object-contain">
           <div>
             <h1 class="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight">Checklist de Entrada de Veículo – AC</h1>
           </div>
         </div>
         <!-- Stepper / Progresso -->
         <nav class="wizard mt-2">
-          <ol class="wizard-steps grid grid-cols-2 sm:grid-cols-5 gap-2">
+          <ol class="wizard-steps">
             <li data-step="1" class="ativo text-center py-2 rounded-lg border">Dados</li>
-            <li data-step="2" class="text-center py-2 rounded-lg border">Avarias</li>
-            <li data-step="3" class="text-center py-2 rounded-lg border">Checklist</li>
-            <li data-step="4" class="text-center py-2 rounded-lg border">Fotos 360</li>
-            <li data-step="5" class="text-center py-2 rounded-lg border">Assinatura</li>
+            <li data-step="2" class="text-center py-2 rounded-lg border">Interior</li>
+            <li data-step="3" class="text-center py-2 rounded-lg border">Lateral Esquerda</li>
+            <li data-step="4" class="text-center py-2 rounded-lg border">Traseira</li>
+            <li data-step="5" class="text-center py-2 rounded-lg border">Lateral Direita</li>
+            <li data-step="6" class="text-center py-2 rounded-lg border">Frente</li>
+            <li data-step="7" class="text-center py-2 rounded-lg border">Resumo</li>
           </ol>
         </nav>
       </header>
@@ -156,10 +158,6 @@
                     <input class="fl-input" placeholder=" " type="text" id="veic_cor">
                     <label class="fl-label" for="veic_cor">Cor</label>
                   </div>
-                  <div class="fl-group col-span-2">
-                    <input class="fl-input" placeholder=" " type="number" id="veic_km">
-                    <label class="fl-label" for="veic_km">KM</label>
-                  </div>
                 </div>
               </div>
             </div>
@@ -167,18 +165,102 @@
           </div>
         </section>
 
-        <!-- === TELA 2: Inspeção 3D + Combustível === -->
+        <!-- === TELA 2: Interior do veículo === -->
         <section class="tela hidden" data-tela="2">
+          <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm mb-8">
+            <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+              <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-blue-50 text-blue-600 text-xs">IN</span>
+                Interior do Veículo
+              </h2>
+            </div>
+
+            <p class="text-sm text-slate-500 mb-4">Preencha o KM, o nível de combustível e os itens obrigatórios antes de avançar.</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <div class="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
+                <h3 class="text-sm font-semibold text-slate-800 mb-3">KM</h3>
+                <div class="fl-group">
+                  <input class="fl-input" placeholder=" " type="number" id="veic_km" min="0">
+                  <label class="fl-label" for="veic_km">KM</label>
+                </div>
+              </div>
+
+              <div class="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
+                <h3 class="text-sm font-semibold text-slate-800 mb-3">Nível de Combustível</h3>
+                <div class="flex flex-col items-center gap-4">
+                  <svg id="fuel-gauge" viewBox="0 0 260 150" class="w-full max-w-md">
+                  <defs>
+              <linearGradient id="fuelGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%"  stop-color="#ef4444"/>
+              <stop offset="50%" stop-color="#f59e0b"/>
+              <stop offset="100%" stop-color="#22c55e"/>
+              </linearGradient>
+                  </defs>
+
+                  <path id="arc-track"
+                d="M 30 120 A 100 100 0 0 1 230 120"
+                fill="none" stroke="#e5e7eb" stroke-width="14" stroke-linecap="round" />
+
+                  <path id="arc-fill"
+                d="M 30 120 A 100 100 0 0 1 230 120"
+                fill="none" stroke="url(#fuelGrad)" stroke-width="14" stroke-linecap="round"
+                style="stroke-dasharray: 0 1; stroke-dashoffset: 0;" />
+
+                  <g font-size="12" fill="#374151" font-weight="600">
+              <text x="30"  y="132" text-anchor="middle">E</text>
+              <text x="130" y="16"  text-anchor="middle">1/2</text>
+              <text x="230" y="132" text-anchor="middle" fill="#047857">F</text>
+                  </g>
+
+                  <g id="ticks" stroke="#cbd5e1" stroke-width="2"></g>
+
+                  <circle cx="130" cy="120" r="5" fill="#111827" />
+                  <g id="needle" transform="rotate(-90,130,120)">
+              <rect x="129" y="30" width="2" height="90" rx="1" fill="#111827"></rect>
+              <circle cx="130" cy="30" r="3" fill="#111827"></circle>
+                  </g>
+                  </svg>
+
+                  <div class="w-full max-w-md flex items-center gap-3">
+                  <span class="font-mono text-sm font-bold text-rose-500">E</span>
+                  <input id="fuel-range" type="range" min="0" max="100" value="0" class="flex-1">
+                  <span class="font-mono text-sm font-bold text-emerald-600">F</span>
+                  </div>
+
+                  <div class="text-sm text-slate-600">
+                  Nível: <span id="fuel-percent" class="font-semibold text-slate-800">0%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
+              <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                <h3 class="text-sm font-semibold text-slate-800">Checklist do Interior</h3>
+                <span class="text-xs text-slate-500">Preenchimento opcional</span>
+              </div>
+              <div id="interior-items-checklist" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+              <p class="mt-4 text-sm font-medium text-slate-700">Abra o porta-malas ou leve a chave ao sair do veículo.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- === TELA 3: Inspeção 3D === -->
+        <section class="tela hidden" data-tela="3">
           <!-- Inspeção 3D -->
           <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm mb-8">
-            <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
               <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2">
-          <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-sky-50 text-sky-600 text-xs">3D</span>
-          Inspeção 3D
+                <span id="inspection-face-badge" class="inline-flex h-6 min-w-6 px-2 items-center justify-center rounded-lg bg-sky-50 text-sky-600 text-xs">LE</span>
+                <span id="inspection-face-title">Lateral Esquerda</span>
               </h2>
-              <span id="model-status" class="badge badge-warn">Carregando…</span>
             </div>
-            <p class="text-sm text-slate-500 mb-3">Clique nos pinos azuis posicionados no veículo para registrar a avaria.</p>
+
+            <div class="grid gap-3 mb-4">
+              <div id="inspection-face-tabs" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
+              <div id="inspection-face-details" class="rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-3"></div>
+            </div>
 
             <model-viewer id="car3d"
               src="models/carro.glb"
@@ -193,65 +275,35 @@
             </model-viewer>
 
             <div id="damages-list" class="mt-4 space-y-2"></div>
-          </div>
 
-          <!-- Combustível -->
-          <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
-            <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
-              <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-amber-50 text-amber-600 text-xs">⛽</span>
-              Nível de Combustível
-            </h2>
-
-            <div class="flex flex-col items-center gap-4">
-              <!-- Gauge -->
-              <svg id="fuel-gauge" viewBox="0 0 260 150" class="w-full max-w-md">
-              <defs>
-          <linearGradient id="fuelGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%"  stop-color="#ef4444"/>
-          <stop offset="50%" stop-color="#f59e0b"/>
-          <stop offset="100%" stop-color="#22c55e"/>
-          </linearGradient>
-              </defs>
-
-              <path id="arc-track"
-            d="M 30 120 A 100 100 0 0 1 230 120"
-            fill="none" stroke="#e5e7eb" stroke-width="14" stroke-linecap="round" />
-
-              <path id="arc-fill"
-            d="M 30 120 A 100 100 0 0 1 230 120"
-            fill="none" stroke="url(#fuelGrad)" stroke-width="14" stroke-linecap="round"
-            style="stroke-dasharray: 0 1; stroke-dashoffset: 0;" />
-
-              <g font-size="12" fill="#374151" font-weight="600">
-          <text x="30"  y="132" text-anchor="middle">E</text>
-          <text x="130" y="16"  text-anchor="middle">1/2</text>
-          <text x="230" y="132" text-anchor="middle" fill="#047857">F</text>
-              </g>
-
-              <g id="ticks" stroke="#cbd5e1" stroke-width="2"></g>
-
-              <circle cx="130" cy="120" r="5" fill="#111827" />
-              <g id="needle" transform="rotate(-90,130,120)">
-          <rect x="129" y="30" width="2" height="90" rx="1" fill="#111827"></rect>
-          <circle cx="130" cy="30" r="3" fill="#111827"></circle>
-              </g>
-              </svg>
-
-              <div class="w-full max-w-md flex items-center gap-3">
-              <span class="font-mono text-sm font-bold text-rose-500">E</span>
-              <input id="fuel-range" type="range" min="0" max="100" value="0" class="flex-1">
-              <span class="font-mono text-sm font-bold text-emerald-600">F</span>
+            <div class="mt-6 rounded-2xl border border-slate-200 bg-white/80 p-4 space-y-4">
+              <div class="flex items-center justify-between gap-3 flex-wrap">
+                <h3 class="text-base font-semibold text-slate-800 flex items-center gap-2">
+                  <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 text-xs">📸</span>
+                  Fotos 360 do Veiculo
+                </h3>
+                <span id="fotos360-progresso" class="text-sm font-semibold text-slate-700">0/8 capturadas</span>
               </div>
 
-              <div class="text-sm text-slate-600">
-              Nível: <span id="fuel-percent" class="font-semibold text-slate-800">0%</span>
+              <div class="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
+                <div id="fotos360-progress-bar" class="h-full bg-indigo-600 transition-all duration-300" style="width:0%"></div>
               </div>
+
+              <div id="fotos360-atual" class="rounded-xl border border-indigo-200 bg-indigo-50/60 p-4">
+                <p class="text-base font-bold text-slate-800" id="fotos360-atual-titulo">Frente do veiculo</p>
+                <p class="text-sm text-slate-600" id="fotos360-atual-instrucao">Tire uma foto centralizada da frente do veiculo.</p>
+              </div>
+
+              <input type="file" id="foto360-guided-input" accept="image/*" capture="environment" class="hidden">
+              <div id="foto360-guided-status" class="text-sm text-slate-500"></div>
+
+              <div id="fotos360-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
             </div>
           </div>
         </section>
 
-        <!-- === TELA 3: Checklist + Observações === -->
-        <section class="tela hidden" data-tela="3">
+        <!-- === TELA 4: Checklist + Observações === -->
+        <section class="tela hidden" data-tela="4">
           <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
             <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
               <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-slate-50 text-slate-600 text-xs">☑️</span>
@@ -273,43 +325,28 @@
           </div>
         </section>
 
-        <!-- === TELA 4: Fotos 360 Guiadas === -->
-        <section class="tela hidden" data-tela="4">
+        <!-- === TELA 5: Fotos 360 Guiadas === -->
+        <section class="tela hidden" data-tela="5">
           <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm space-y-4">
-            <div class="flex items-center justify-between gap-3 flex-wrap">
-              <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 text-xs">📸</span>
-                Fotos 360 do Veiculo
-              </h2>
-              <span id="fotos360-progresso" class="text-sm font-semibold text-slate-700">0/8 capturadas</span>
-            </div>
-
-            <div class="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
-              <div id="fotos360-progress-bar" class="h-full bg-indigo-600 transition-all duration-300" style="width:0%"></div>
-            </div>
-
-            <div id="fotos360-atual" class="rounded-xl border border-indigo-200 bg-indigo-50/60 p-4">
-              <p class="text-sm font-semibold text-indigo-900" id="fotos360-atual-indice">Foto 1 de 8</p>
-              <p class="text-base font-bold text-slate-800" id="fotos360-atual-titulo">Frente do veiculo</p>
-              <p class="text-sm text-slate-600" id="fotos360-atual-instrucao">Tire uma foto centralizada da frente do veiculo.</p>
-            </div>
-
-            <input type="file" id="foto360-guided-input" accept="image/*" capture="environment" class="hidden">
-            <div id="foto360-guided-status" class="text-sm text-slate-500"></div>
-
-            <div id="fotos360-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+            <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2">
+              <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 text-xs">📸</span>
+              Revisão de Fotos 360
+            </h2>
+            <p id="fotos360-review-progress" class="text-sm text-slate-600">0/8 fotos capturadas</p>
+            <ul id="fotos360-review-missing" class="list-disc pl-5 text-sm text-rose-600 space-y-1"></ul>
+            <div id="fotos360-review-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
           </div>
         </section>
 
-        <!-- === TELA 5: Resumo + Assinaturas === -->
-        <section class="tela hidden" data-tela="5">
+        <!-- === TELA 7: Resumo + Assinaturas === -->
+        <section class="tela hidden" data-tela="7">
           <div class="rounded-2xl border border-slate-200 bg-white/70 p-5 sm:p-6 shadow-sm">
             <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2 mb-4">
               <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 text-xs">🔎</span>
-              Resumo & Assinaturas
+              Resumo
             </h2>
 
-            <!-- Resumo preenchido via JS ao entrar na Tela 4 -->
+            <!-- Resumo preenchido via JS ao entrar na etapa final -->
             <div id="summary-content" class="space-y-6"></div>
 
             <!-- Assinaturas -->
@@ -338,11 +375,6 @@
                 class="inline-flex items-center justify-center gap-2 bg-indigo-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-indigo-700 active:scale-[.99] shadow-[0_12px_24px_rgba(79,70,229,.25)] transition w-full sm:w-auto">
                 Concluir checklist
               </button>
-
-              <button onclick="window.location.reload()"
-                class="inline-flex items-center justify-center gap-2 bg-white text-slate-800 font-semibold py-3 px-6 rounded-xl border border-slate-200 hover:bg-slate-50 active:scale-[.99] transition w-full sm:w-auto">
-                Limpar Formulário
-              </button>
             </div>
 
             <div id="post-status" class="mt-3 text-center text-sm text-slate-500"></div>
@@ -354,7 +386,7 @@
           <button id="btn-voltar-listagem" class="inline-flex items-center justify-center px-4 py-2 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 font-semibold">Cancelar e voltar</button>
           <div class="flex items-center gap-3 sm:ml-auto">
             <button id="btn-prev" class="btn-nav" disabled>← Anterior</button>
-            <div class="text-sm text-slate-500"><span id="wizard-indice">1</span>/5</div>
+            <div class="text-sm text-slate-500"><span id="wizard-indice">1</span>/7</div>
             <button id="btn-next" class="btn-nav">Próximo →</button>
           </div>
         </div>

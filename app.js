@@ -154,16 +154,41 @@ async function compressDataUrl(dataUrl, maxW = 1280, maxH = 1280, quality = 0.65
 }
 
 /* ==========================================================
-   WIZARD (4 telas)
-   ========================================================== */
+  WIZARD (7 telas)
+  ========================================================== */
 
-const totalTelas = 5;
+const totalTelas = 7;
 let telaAtual = 0; // Começa na tela inicial (listagem)
+
+function faceDaTelaWizard(tela) {
+  if (tela === 3) return 'lateral_esquerda';
+  if (tela === 4) return 'traseira';
+  if (tela === 5) return 'lateral_direita';
+  if (tela === 6) return 'frente';
+  return null;
+}
 
 function atualizarWizardUI() {
   $$('.tela').forEach(sec=>{
     const n = Number(sec.dataset.tela);
-    sec.classList.toggle('hidden', n !== telaAtual);
+    let visivel = (n === telaAtual);
+
+    // As etapas 3, 4, 5 e 6 compartilham a mesma área de inspeção 3D (data-tela=3).
+    if (n === 3) {
+      visivel = telaAtual >= 3 && telaAtual <= 6;
+    }
+
+    // Checklist legado e revisão antiga não são mais etapas separadas do fluxo.
+    if (n === 4 || n === 5) {
+      visivel = false;
+    }
+
+    // Tela 7 é a aba de Resumo e assinaturas, separada da inspeção frontal.
+    if (n === 7) {
+      visivel = telaAtual === 7;
+    }
+
+    sec.classList.toggle('hidden', !visivel);
   });
   $$('.wizard-steps li').forEach(li=>{
     li.classList.toggle('ativo', Number(li.dataset.step) === telaAtual);
@@ -178,9 +203,31 @@ function atualizarWizardUI() {
   }
   $('#wizard-indice').textContent = String(telaAtual);
   $('#btn-prev').disabled = (telaAtual === 1);
-  $('#btn-next').textContent = (telaAtual === totalTelas) ? 'Finalizar' : 'Próximo →';
+  const btnNext = $('#btn-next');
+  if (btnNext) {
+    const telaResumoFinal = telaAtual === totalTelas;
+    btnNext.textContent = 'Próximo →';
+    btnNext.classList.toggle('hidden', telaResumoFinal);
+    btnNext.disabled = telaResumoFinal;
+  }
+
+  if (telaAtual >= 3 && telaAtual <= 6) {
+    const face = faceDaTelaWizard(telaAtual);
+    if (face) window.setFace3dAtual?.(face);
+    window.renderizarFaces3d?.();
+    window.renderizarHotspots?.();
+    const faceAtual = window.getFace3dAtual?.() || face;
+    if (faceAtual) {
+      window.aplicarPresetCameraFace?.(faceAtual);
+    }
+    window.renderizarFotos360Guiadas?.();
+  }
 
   if (telaAtual === 5) {
+    window.renderizarRevisaoFotos360?.();
+  }
+
+  if (telaAtual === 7) {
     window.ensureSignaturesReady?.();
     window.renderResumo?.();
   }
@@ -218,14 +265,65 @@ async function finalizarChecklist() {
 }
 
 function proximaTela() {
+  if (telaAtual === 2 && !(window.validarEtapaInterior?.() ?? true)) {
+    return;
+  }
+
+  if (telaAtual >= 3 && telaAtual <= 5) {
+    if (!(window.validarChecklistFaceAtualLocal?.() ?? true)) {
+      return;
+    }
+  }
+
+  if (telaAtual === 6) {
+    if (!(window.validarChecklistObrigatorioFaces3dLocal?.() ?? true)) {
+      return;
+    }
+
+    if (!validarEtapaFotos360()) {
+      return;
+    }
+  }
+
   if (telaAtual < totalTelas) {
     irParaTela(telaAtual + 1);
-  } else {
-    finalizarChecklist();
   }
 }
 
 function telaAnterior() { irParaTela(telaAtual - 1); }
+
+function validarChecklistFaceAtual() {
+  return window.validarChecklistFaceAtualLocal?.() ?? true;
+}
+
+function avancarFace3d() {
+  const faces = window.getChecklist3dFaces?.() || [];
+  const atual = window.getFace3dAtual?.();
+  const idx = faces.findIndex((f) => f.id === atual);
+  if (idx < 0 || idx >= faces.length - 1) return false;
+
+  const proximaFace = faces[idx + 1]?.id;
+  if (!proximaFace) return false;
+
+  window.setFace3dAtual?.(proximaFace);
+  window.renderizarFaces3d?.();
+  window.renderizarHotspots?.();
+  window.aplicarPresetCameraFace?.(proximaFace);
+  window.renderizarFotos360Guiadas?.();
+  return true;
+}
+
+function validarEtapaFotos360() {
+  const faltantes = window.getFotos360MissingTitles?.() || [];
+  if (!faltantes.length) return true;
+
+  alert(`Finalize as fotos 360 antes de continuar.\n\nFaltando:\n${faltantes.join('\n')}`);
+  return false;
+}
+
+function validarChecklistObrigatorioFaces3d() {
+  return window.validarChecklistObrigatorioFaces3dLocal?.() ?? true;
+}
 
 // Estado da paginação/filtro
 let paginaAtual = 1;
@@ -944,11 +1042,28 @@ async function enviarFotoChecklist() {
    ========================================================== */
 const pecasPreDefinidas = [
   { id:'capo',            label:'Capô',                   pos:{ x: 1.70, y: 1.00, z: 0.00 },  norm:{ x: 0.00, y: 1.00, z: 0.00 } },
+  { id:'parachoque-diant', label:'Parachoque Dianteiro',  pos:{ x: 2.505466, y: 0.389029, z:-0.014966 }, norm:{ x: 0.994977, y:-0.042662, z:-0.09056 } },
+  { id:'parabrisa',        label:'Parabrisa',             pos:{ x: 0.661851, y: 1.217214, z: 0.007884 }, norm:{ x: 0.460568, y: 0.886811, z: 0.038004 } },
+  { id:'teto',             label:'Teto',                  pos:{ x:-0.234821, y: 1.417443, z:-0.029234 }, norm:{ x: 0.031215, y: 0.999394, z:-0.015391 } },
   { id:'porta-malas',     label:'Porta-malas',            pos:{ x:-2.05, y: 1.20, z: 0.00 },  norm:{ x: 0.00, y: 1.00, z: 0.00 } },
+  { id:'vidro-vigia',      label:'Vidro Vigia',           pos:{ x:-1.347809, y: 1.261686, z:-0.001551 }, norm:{ x:-0.365911, y: 0.930337, z:-0.024108 } },
+  { id:'parachoque-tras',  label:'Parachoque Traseiro',   pos:{ x:-2.509819, y: 0.519751, z:-0.0368 },   norm:{ x:-0.999674, y:-0.020601, z:-0.015063 } },
+  { id:'parachoque-diant-esq', label:'Lateral Esquerda Parachoque Dianteiro', pos:{ x: 1.914424, y: 0.469211, z:-0.875796 }, norm:{ x: 0.120444, y:-0.158824, z:-0.979933 } },
+  { id:'retrovisor-esq',   label:'Retrovisor Esquerdo',   pos:{ x: 0.595702, y: 1.018113, z:-1.036161 }, norm:{ x: 0.256757, y: 0.137466, z:-0.95665 } },
+  { id:'traseira-lateral-esq', label:'Traseira da Lateral Esquerda', pos:{ x:-1.772571, y: 0.876005, z:-0.845185 }, norm:{ x:-0.095993, y: 0.328602, z:-0.939578 } },
+  { id:'parachoque-tras-esq', label:'Lateral Esquerda Parachoque Traseiro', pos:{ x:-2.046462, y: 0.475409, z:-0.839507 }, norm:{ x:-0.13623, y:-0.134784, z:-0.981466 } },
+  { id:'macaneta-diant-motorista', label:'Macaneta Dianteira Motorista', pos:{ x:-0.049117, y: 0.815511, z:-0.9056 }, norm:{ x: 0.05349, y: 0.346633, z:-0.936474 } },
+  { id:'macaneta-tras-esq', label:'Macaneta Traseira Lado Esquerdo', pos:{ x:-1.060698, y: 0.851982, z:-0.886068 }, norm:{ x:-0.038849, y:-0.89635, z:-0.441643 } },
   { id:'porta-tras-dir',  label:'Porta Traseira Dir.',    pos:{ x:-0.60, y: 0.65, z: 1.00 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } },
   { id:'porta-diant-dir', label:'Porta Dianteira Dir.',   pos:{ x: 0.30, y: 0.65, z: 1.00 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } },
   { id:'porta-diant-esq', label:'Porta Dianteira Esq.',  pos:{ x: 0.30, y: 0.65, z:-1.00 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } },
   { id:'porta-tras-esq',  label:'Porta Traseira Esq.',   pos:{ x:-0.60, y: 0.65, z:-1.00 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } },
+  { id:'parachoque-diant-dir', label:'Lateral Direita Parachoque Dianteiro', pos:{ x: 2.063203, y: 0.429753, z: 0.848042 }, norm:{ x: 0.149054, y:-0.205062, z: 0.967333 } },
+  { id:'traseira-lateral-dir', label:'Traseira da Lateral Direita', pos:{ x:-1.789021, y: 0.894855, z: 0.837047 }, norm:{ x:-0.09273, y: 0.316936, z: 0.943903 } },
+  { id:'retrovisor-dir',   label:'Retrovisor Direito',    pos:{ x: 0.58367, y: 1.031144, z: 1.037518 },   norm:{ x: 0.256757, y: 0.137462, z: 0.95665 } },
+  { id:'parachoque-tras-dir', label:'Lateral Direita Parachoque Traseiro', pos:{ x:-2.200418, y: 0.457221, z: 0.812488 }, norm:{ x:-0.201591, y:-0.138911, z: 0.96957 } },
+  { id:'macaneta-diant-passageiro', label:'Macaneta Dianteira Lado Direito Passageiro', pos:{ x:-0.037821, y: 0.829313, z: 0.910651 }, norm:{ x:-0.000611, y: 0.455316, z: 0.89033 } },
+  { id:'macaneta-tras-passageiro', label:'Macaneta Traseira Lado Direito Passageiro', pos:{ x:-1.022432, y: 0.8576, z: 0.890533 }, norm:{ x: 0.015153, y: 0.477711, z: 0.878386 } },
   { id:'janela-tras-esq', label:'Janela Traseira Esq.',   pos:{ x:-0.60, y: 1.25, z:-0.90 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } },
   { id:'janela-diant-esq',label:'Janela Dianteira Esq.',  pos:{ x: 0.15, y: 1.25, z:-0.90 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } },
   { id:'janela-tras-dir', label:'Janela Traseira Dir.',   pos:{ x:-0.60, y: 1.25, z: 0.90 },  norm:{ x: 0.00, y: 0.00, z: 0.00 } },
@@ -1025,6 +1140,9 @@ const pecasPreDefinidas = [
   const fotos360AtualIndice = $('#fotos360-atual-indice');
   const fotos360AtualTitulo = $('#fotos360-atual-titulo');
   const fotos360AtualInstrucao = $('#fotos360-atual-instrucao');
+  const fotos360ReviewProgress = $('#fotos360-review-progress');
+  const fotos360ReviewMissing = $('#fotos360-review-missing');
+  const fotos360ReviewGrid = $('#fotos360-review-grid');
 
   let foto360TargetKey = null;
   let fotos360State = FOTOS_360_GUIADAS.reduce((acc, p) => {
@@ -1045,6 +1163,14 @@ const pecasPreDefinidas = [
     return FOTOS_360_GUIADAS.filter((p) => !!fotos360State[p.chave]?.foto).length;
   }
 
+  function fotos360DaFaceAtiva() {
+    const chaves = FOTOS_360_POR_FACE[face3dAtual];
+    if (!Array.isArray(chaves) || !chaves.length) return FOTOS_360_GUIADAS;
+    return chaves
+      .map((chave) => FOTOS_360_GUIADAS.find((p) => p.chave === chave))
+      .filter(Boolean);
+  }
+
   function montarFotos360Payload() {
     return FOTOS_360_GUIADAS
       .map((p) => {
@@ -1062,9 +1188,11 @@ const pecasPreDefinidas = [
   }
 
   function atualizarCardFotoAtual() {
-    if (!fotos360AtualIndice || !fotos360AtualTitulo || !fotos360AtualInstrucao) return;
-    const pendente = fotos360Pendentes()[0] || FOTOS_360_GUIADAS[FOTOS_360_GUIADAS.length - 1];
-    fotos360AtualIndice.textContent = `Foto ${pendente.ordem} de 8`;
+    if (!fotos360AtualTitulo || !fotos360AtualInstrucao) return;
+    const fotosDaFace = fotos360DaFaceAtiva();
+    const pendente = fotosDaFace.find((p) => !fotos360State[p.chave]?.foto)
+      || fotosDaFace[0]
+      || FOTOS_360_GUIADAS[0];
     fotos360AtualTitulo.textContent = pendente.titulo;
     fotos360AtualInstrucao.textContent = pendente.instrucao;
   }
@@ -1083,7 +1211,9 @@ const pecasPreDefinidas = [
     if (fotos360Progresso) fotos360Progresso.textContent = `${capturadas}/8 capturadas`;
     if (fotos360ProgressBar) fotos360ProgressBar.style.width = `${percentual}%`;
 
-    fotos360Grid.innerHTML = FOTOS_360_GUIADAS.map((p) => {
+    const fotosDaFace = fotos360DaFaceAtiva();
+
+    fotos360Grid.innerHTML = fotosDaFace.map((p) => {
       const st = fotos360State[p.chave];
       const temFoto = !!st?.foto;
       const preview = st?.previewUrl
@@ -1094,7 +1224,6 @@ const pecasPreDefinidas = [
         <article class="rounded-xl border border-slate-200 bg-white/70 p-3 space-y-2" data-foto360-item="${p.chave}">
           <div class="flex items-start justify-between gap-2">
             <div>
-              <p class="text-xs font-semibold text-slate-500">Foto ${p.ordem} de 8</p>
               <p class="text-sm font-bold text-slate-800">${p.titulo}</p>
               <p class="text-xs text-slate-600">${p.instrucao}</p>
             </div>
@@ -1109,6 +1238,38 @@ const pecasPreDefinidas = [
     }).join('');
 
     atualizarCardFotoAtual();
+  }
+
+  function renderizarRevisaoFotos360() {
+    if (!fotos360ReviewProgress || !fotos360ReviewMissing || !fotos360ReviewGrid) return;
+
+    const capturadas = fotos360Capturadas();
+    fotos360ReviewProgress.textContent = `${capturadas}/8 fotos capturadas`;
+
+    const faltantes = fotos360Pendentes();
+    fotos360ReviewMissing.innerHTML = faltantes.length
+      ? faltantes.map((p) => `<li>${p.titulo}</li>`).join('')
+      : '<li class="text-emerald-700">Todas as fotos 360 foram capturadas.</li>';
+
+    fotos360ReviewGrid.innerHTML = FOTOS_360_GUIADAS.map((p) => {
+      const st = fotos360State[p.chave];
+      const temFoto = !!st?.foto;
+      const status = temFoto ? 'capturada' : 'pendente';
+      const preview = st?.previewUrl
+        ? `<img src="${st.previewUrl}" class="rounded-lg border border-slate-200 max-h-28 w-auto" alt="Preview ${p.titulo}">`
+        : '<div class="h-20 flex items-center justify-center rounded-lg border border-dashed border-slate-300 text-xs text-slate-400">Sem foto</div>';
+
+      return `
+        <article class="rounded-xl border border-slate-200 bg-white/70 p-3 space-y-2">
+          <div class="flex items-start justify-between gap-2">
+            <p class="text-sm font-semibold text-slate-800">${p.titulo}</p>
+            ${badgeStatus(status)}
+          </div>
+          <p class="text-xs text-slate-500">${p.instrucao}</p>
+          <div>${preview}</div>
+        </article>
+      `;
+    }).join('');
   }
 
   async function uploadFoto360(file) {
@@ -1165,6 +1326,7 @@ const pecasPreDefinidas = [
         fotos360Status.textContent = `Foto salva para ${current.titulo}.`;
       }
       renderizarFotos360Guiadas();
+      renderizarRevisaoFotos360();
     } catch (err) {
       console.error(err);
       if (fotos360Status) fotos360Status.textContent = 'Erro ao enviar foto 360. Tente novamente.';
@@ -1194,6 +1356,7 @@ const pecasPreDefinidas = [
     if (foto360GuidedInput) foto360GuidedInput.value = '';
     foto360TargetKey = null;
     renderizarFotos360Guiadas();
+    renderizarRevisaoFotos360();
   }
 
   window.getFotos360Payload = montarFotos360Payload;
@@ -1207,10 +1370,356 @@ const pecasPreDefinidas = [
     return L ? { x:v.x/L, y:v.y/L, z:v.z/L } : { x:0, y:1, z:0 };
   };
   const setarStatus = (chave, texto)=>{
+    if (!statusModelo) return;
     statusModelo.className = 'badge ' + (chave==='ok' ? 'badge-ok' : chave==='err' ? 'badge-err' : 'badge-warn');
     statusModelo.textContent = texto;
   };
   const pegarValorInput = (id)=> (document.getElementById(id)?.value ?? '').trim();
+
+  const CHECKLIST_INTERIOR = [
+    { id: 'extintor_incendio', label: 'Extintor de Incêndio' },
+    { id: 'tapetes', label: 'Tapetes' },
+    { id: 'radio_cd_dvd', label: 'Rádio/CD/DVD' },
+    { id: 'alarme', label: 'Alarme' },
+    { id: 'acendedor_cigarro', label: 'Acendedor de Cigarro' },
+    { id: 'retrovisor_interno', label: 'Retrovisor Interno' },
+    { id: 'retirada_pertences', label: 'Retirada de Pertences' },
+    { id: 'documentos_veiculo', label: 'Documentos do veículo' },
+  ];
+
+  const CHECKLIST_3D_FACES = [
+    {
+      id: 'lateral_esquerda',
+      sigla: 'LE',
+      label: 'Lateral Esquerda',
+      tituloCabecalho: 'Lateral Esquerda (Lado do Motorista)',
+      subtitle: 'Lado do motorista',
+      orientacao: 'Vista inicial planejada para a lateral esquerda.',
+      hotspots: 'Hotspots visíveis somente desta face na etapa 3D.',
+      fotos360: ['Lateral Esquerda', 'Lateral Esquerda + Traseira'],
+      camera: { orbit: '-3.107497105071775rad 1.3623546049081396rad 6m', target: '0m 1m 0m', fov: '30.000000000000004deg' },
+    },
+    {
+      id: 'traseira',
+      sigla: 'TR',
+      label: 'Traseira',
+      subtitle: 'Vista traseira',
+      orientacao: 'Vista inicial planejada para a traseira.',
+      hotspots: 'Hotspots visíveis somente desta face na etapa 3D.',
+      fotos360: ['Traseira', 'Traseira + Lateral Direita'],
+      camera: { orbit: '4.710308031414111rad 1.4477268703679669rad 7.134100918026326m', target: '0m 1m 0m', fov: '30.000000000000004deg' },
+    },
+    {
+      id: 'lateral_direita',
+      sigla: 'LD',
+      label: 'Lateral Direita',
+      tituloCabecalho: 'Lateral Direita (Lado do Passageiro)',
+      subtitle: 'Lado do passageiro',
+      orientacao: 'Vista inicial planejada para a lateral direita.',
+      hotspots: 'Hotspots visíveis somente desta face na etapa 3D.',
+      fotos360: ['Lateral Direita', 'Lateral Direita + Frente'],
+      camera: { orbit: '0.0020809489705833663rad 1.394369204455574rad 6m', target: '0m 1m 0m', fov: '30.000000000000004deg' },
+    },
+    {
+      id: 'frente',
+      sigla: 'FR',
+      label: 'Frente',
+      subtitle: 'Vista frontal',
+      orientacao: 'Vista inicial planejada para a frente do veículo.',
+      hotspots: 'Hotspots visíveis somente desta face na etapa 3D.',
+      fotos360: ['Frente', 'Frente + Lateral Esquerda'],
+      camera: { orbit: '1.558043844641834rad 1.4491808667640795rad 7.131109409205532m', target: '0m 1m 0m', fov: '30.000000000000004deg' },
+    },
+  ];
+
+  const CHECKLIST_OBRIGATORIO_POR_FACE = {
+    lateral_esquerda: [
+      { id: 'tanque_combustivel_esquerda', label: 'Tanque de Combustível' },
+    ],
+    traseira: [
+      { id: 'palheta_traseira', label: 'Palheta Traseira' },
+      { id: 'estepe', label: 'Estepe' },
+      { id: 'triangulo', label: 'Triângulo' },
+      { id: 'macaco', label: 'Macaco' },
+      { id: 'chave_de_roda', label: 'Chave de Roda' },
+      { id: 'antena', label: 'Antena' },
+    ],
+    lateral_direita: [
+      { id: 'tanque_combustivel_confirmacao_direita', label: 'Tanque de Combustível', condicionalTanqueNA: true },
+    ],
+    frente: [
+      { id: 'palheta_dianteira', label: 'Palheta Dianteira' },
+    ],
+  };
+
+  const FOTOS_360_POR_FACE = {
+    lateral_esquerda: ['lateral_esquerda', 'traseira_lateral_esquerda'],
+    traseira: ['traseira', 'lateral_direita_traseira'],
+    lateral_direita: ['lateral_direita', 'frente_lateral_direita'],
+    frente: ['frente', 'lateral_esquerda_frente'],
+  };
+
+  const HOTSPOT_IDS_POR_FACE = {
+    lateral_esquerda: [
+      'parachoque-diant-esq',
+      'retrovisor-esq',
+      'janela-diant-esq',
+      'janela-tras-esq',
+      'porta-diant-esq',
+      'macaneta-diant-motorista',
+      'porta-tras-esq',
+      'macaneta-tras-esq',
+      'traseira-lateral-esq',
+      'parachoque-tras-esq',
+    ],
+    traseira: ['vidro-vigia', 'porta-malas', 'parachoque-tras', 'farol-tras-dir', 'farol-tras-esq'],
+    lateral_direita: [
+      'parachoque-diant-dir',
+      'retrovisor-dir',
+      'janela-diant-dir',
+      'janela-tras-dir',
+      'porta-diant-dir',
+      'macaneta-diant-passageiro',
+      'porta-tras-dir',
+      'macaneta-tras-passageiro',
+      'traseira-lateral-dir',
+      'parachoque-tras-dir',
+    ],
+    frente: ['parachoque-diant', 'parabrisa', 'teto', 'capo', 'farol-diant-dir', 'farol-diant-esq'],
+  };
+
+  let face3dAtual = CHECKLIST_3D_FACES[0]?.id || 'lateral_esquerda';
+
+  const CHECKLIST_STATUS_OPTIONS = ['OK', 'Avariado', 'Ausente', 'N/A'];
+
+  const checklistFaceState = Object.values(CHECKLIST_OBRIGATORIO_POR_FACE)
+    .flat()
+    .reduce((acc, item) => {
+      acc[item.id] = { id: item.id, label: item.label, status: '' };
+      return acc;
+    }, {});
+
+  function tanqueCombustivelEsquerdaEhNA() {
+    return checklistFaceState.tanque_combustivel_esquerda?.status === 'N/A';
+  }
+
+  function itensObrigatoriosDaFace(faceId) {
+    const itens = CHECKLIST_OBRIGATORIO_POR_FACE[faceId] || [];
+    return itens.filter((item) => {
+      if (!item.condicionalTanqueNA) return true;
+      return tanqueCombustivelEsquerdaEhNA();
+    });
+  }
+
+  function normalizarStatusChecklist(valor) {
+    const texto = String(valor || '').trim();
+    if (texto === 'Faltante') return 'Ausente';
+    if (CHECKLIST_STATUS_OPTIONS.includes(texto)) return texto;
+    return '';
+  }
+
+  function montarLinhaChecklistInterior(item) {
+    const linha = document.createElement('article');
+    linha.className = 'rounded-xl border border-slate-200 bg-white/70 p-3 shadow-sm space-y-3';
+    linha.dataset.checklistItem = item.id;
+    linha.innerHTML = `
+      <div class="flex items-start justify-between gap-3">
+        <span class="text-sm font-medium text-slate-700">${item.label}</span>
+        <div class="select-wrap w-36 shrink-0">
+          <select class="nice-select pr-8 checklist-status" data-item-id="${item.id}">
+            <option value="">Selecione</option>
+            <option value="OK">OK</option>
+            <option value="Avariado">Avariado</option>
+            <option value="Ausente">Ausente</option>
+            <option value="N/A">N/A</option>
+          </select>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" class="text-slate-400">
+            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+      </div>
+      <div class="checklist-observacao hidden">
+        <label class="block text-xs font-medium text-slate-500 mb-1">Observação</label>
+        <textarea class="fl-input min-h-[72px] checklist-notes" placeholder="Descreva a condição do item"></textarea>
+      </div>
+    `;
+
+    const select = linha.querySelector('.checklist-status');
+    const observacaoBox = linha.querySelector('.checklist-observacao');
+    const observacao = linha.querySelector('.checklist-notes');
+
+    function sincronizarObservacao() {
+      const status = normalizarStatusChecklist(select.value);
+      const precisaObs = status === 'Avariado' || status === 'Ausente';
+      observacaoBox.classList.toggle('hidden', !precisaObs);
+      observacao.required = precisaObs;
+      if (!precisaObs) {
+        observacao.value = '';
+      }
+    }
+
+    select.addEventListener('change', sincronizarObservacao);
+    sincronizarObservacao();
+    return linha;
+  }
+
+  function coletarChecklistDoContainer(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return [];
+
+    return Array.from(container.querySelectorAll('[data-checklist-item]')).map((card) => {
+      const select = card.querySelector('.checklist-status');
+      const notes = card.querySelector('.checklist-notes');
+      const itemId = card.dataset.checklistItem || '';
+      const label = card.querySelector('span')?.textContent?.trim() || itemId;
+      const status = normalizarStatusChecklist(select?.value) || '';
+      const observacao = String(notes?.value || '').trim();
+      return { id: itemId, item: label, status, observacao };
+    });
+  }
+
+  function coletarChecklistInterior() {
+    return coletarChecklistDoContainer('interior-items-checklist');
+  }
+
+  function validarChecklistInteriorItens() {
+    const itens = coletarChecklistInterior();
+    if (itens.length !== CHECKLIST_INTERIOR.length) return false;
+
+    for (const item of itens) {
+      if (!item.status) return false;
+      if ((item.status === 'Avariado' || item.status === 'Ausente') && !item.observacao) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  function validarEtapaInterior() {
+    const fuelRange = document.getElementById('fuel-range');
+    const fuelValue = toIntOrNull(fuelRange?.value);
+
+    if (fuelValue === null || fuelValue < 0 || fuelValue > 100) {
+      alert('Informe um nível de combustível válido entre 0% e 100%.');
+      fuelRange?.focus?.();
+      return false;
+    }
+
+    const statusChecklist = coletarChecklistInterior();
+    const obsPendente = statusChecklist.find((item) => (item.status === 'Avariado' || item.status === 'Ausente') && !item.observacao);
+    if (obsPendente) {
+      alert(`Informe a observação do item: ${obsPendente.item}.`);
+      const obs = document.querySelector(`[data-checklist-item="${obsPendente.id}"] .checklist-notes`);
+      obs?.focus?.();
+      return false;
+    }
+
+    return true;
+  }
+
+  function renderizarFaces3d() {
+    const tabs = document.getElementById('inspection-face-tabs');
+    const details = document.getElementById('inspection-face-details');
+    const faceBadge = document.getElementById('inspection-face-badge');
+    const faceTitle = document.getElementById('inspection-face-title');
+    if (!tabs || !details) return;
+
+    tabs.classList.add('hidden');
+
+    tabs.innerHTML = CHECKLIST_3D_FACES.map((face) => {
+      const ativo = face.id === face3dAtual;
+      return `
+        <button type="button"
+          class="face-3d-tab rounded-xl border px-3 py-3 text-left transition ${ativo ? 'border-sky-300 bg-sky-50 text-sky-800 shadow-sm' : 'border-slate-200 bg-white/70 text-slate-700 hover:bg-slate-50'}"
+          data-face-3d="${face.id}">
+          <span class="block text-sm font-semibold">${face.label}</span>
+          <span class="block text-xs mt-1 ${ativo ? 'text-sky-700' : 'text-slate-500'}">${face.subtitle}</span>
+        </button>
+      `;
+    }).join('');
+
+    const current = CHECKLIST_3D_FACES.find((face) => face.id === face3dAtual) || CHECKLIST_3D_FACES[0];
+    if (faceBadge) faceBadge.textContent = current.sigla || '--';
+    if (faceTitle) faceTitle.textContent = current.tituloCabecalho || current.label || 'Inspeção';
+    const itensChecklistFace = itensObrigatoriosDaFace(current.id);
+    const itensDaFaceHtml = itensChecklistFace.length
+      ? itensChecklistFace.map((item) => {
+        const valorAtual = checklistFaceState[item.id]?.status || '';
+        const opcoes = CHECKLIST_STATUS_OPTIONS.map((status) => `<option value="${status}" ${valorAtual === status ? 'selected' : ''}>${status}</option>`).join('');
+        return `
+          <article class="rounded-xl border border-slate-200 bg-white/70 p-3 shadow-sm space-y-3">
+            <div class="flex items-start justify-between gap-3">
+              <span class="text-sm font-medium text-slate-700">${item.label}</span>
+              <div class="select-wrap w-36 shrink-0">
+                <select class="nice-select pr-8 checklist-status" data-face-check-item="${item.id}">
+                  <option value="">Selecione</option>
+                  ${opcoes}
+                </select>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" class="text-slate-400">
+                  <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+            </div>
+          </article>
+        `;
+      }).join('')
+      : '<p class="text-xs text-slate-500">Nenhum item selecionado nesta face.</p>';
+
+    details.innerHTML = `
+      <div class="flex items-center gap-2 flex-wrap">
+        <button type="button" id="inspection-face-reset-view" class="inline-flex items-center justify-center px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50">
+          Reposicionar visão
+        </button>
+      </div>
+      <div class="rounded-lg border border-slate-200 bg-white/80 p-3">
+        <p class="text-xs font-semibold text-slate-600 mb-2">Checklist da face</p>
+        <div class="grid grid-cols-2 gap-2">${itensDaFaceHtml}</div>
+      </div>
+    `;
+
+  }
+
+  document.addEventListener('click', (event) => {
+    const botao = event.target.closest?.('[data-face-3d]');
+    if (!botao) return;
+    const faceId = botao.getAttribute('data-face-3d');
+    if (!faceId || faceId === face3dAtual) return;
+    face3dAtual = faceId;
+    renderizarFaces3d();
+    renderizarHotspots();
+    aplicarPresetCameraFace(face3dAtual);
+    renderizarFotos360Guiadas();
+  });
+
+  document.addEventListener('click', (event) => {
+    const botaoReset = event.target.closest?.('#inspection-face-reset-view');
+    if (!botaoReset) return;
+    aplicarPresetCameraFace(face3dAtual);
+  });
+
+  document.addEventListener('change', (event) => {
+    const selectChecklistFace = event.target.closest?.('[data-face-check-item]');
+    if (!selectChecklistFace) return;
+
+    const itemId = selectChecklistFace.getAttribute('data-face-check-item');
+    if (!itemId || !checklistFaceState[itemId]) return;
+
+    checklistFaceState[itemId].status = normalizarStatusChecklist(selectChecklistFace.value);
+
+    // Se o tanque da esquerda deixar de ser N/A, limpamos confirmação da direita.
+    if (itemId === 'tanque_combustivel_esquerda' && !tanqueCombustivelEsquerdaEhNA()) {
+      if (checklistFaceState.tanque_combustivel_confirmacao_direita) {
+        checklistFaceState.tanque_combustivel_confirmacao_direita.status = '';
+      }
+    }
+
+    if (itemId === 'tanque_combustivel_esquerda') {
+      renderizarFaces3d();
+    }
+
+    schedulePersistChecklistDraft();
+  });
 
   function toIntOrNull(v) {
     if (v === undefined || v === null) return null;
@@ -1297,6 +1806,15 @@ const pecasPreDefinidas = [
   /* ==========================================================
      BUILD CHECKLIST ITENS
      ========================================================== */
+  (function construirChecklistInterior(){
+    const container = $('#interior-items-checklist');
+    if (!container) return;
+
+    CHECKLIST_INTERIOR.forEach((item) => {
+      container.appendChild(montarLinhaChecklistInterior(item));
+    });
+  })();
+
   (function construirChecklist(){
     const itens = [
       'Extintor de Incêndio','Tapetes','Rádio/CD/DVD','Alarme','Acendedor de Cigarro',
@@ -1393,9 +1911,9 @@ const pecasPreDefinidas = [
     sizeCanvas(document.getElementById(id));
   };
 
-  if (telaAtual === 5) window.ensureSignaturesReady();
+  if (telaAtual === 7) window.ensureSignaturesReady();
   window.addEventListener('resize', ()=> {
-    if (telaAtual === 5) window.ensureSignaturesReady();
+    if (telaAtual === 7) window.ensureSignaturesReady();
   });
 })();
 
@@ -1435,10 +1953,40 @@ const pecasPreDefinidas = [
     return botao;
   }
 
+  function obterHotspotsDaFace(faceId) {
+    const ids = HOTSPOT_IDS_POR_FACE[faceId] || [];
+    if (!ids.length) return pecasPreDefinidas;
+    return pecasPreDefinidas.filter((p) => ids.includes(p.id));
+  }
+
   function renderizarHotspots(){
     if (!modelo3d) return;
     $$('button[slot^="hotspot-"]', modelo3d).forEach(b=>b.remove());
-    pecasPreDefinidas.forEach((p, i)=> modelo3d.appendChild(criarBotaoHotspot(p, i)));
+    const hotspotsAtivos = obterHotspotsDaFace(face3dAtual);
+    hotspotsAtivos.forEach((p, i)=> modelo3d.appendChild(criarBotaoHotspot(p, i)));
+  }
+
+  function aplicarPresetCameraFace(faceId) {
+    if (!modelo3d) return;
+    const face = CHECKLIST_3D_FACES.find((f) => f.id === faceId);
+    if (!face?.camera) return;
+
+    try {
+      modelo3d.setAttribute('camera-orbit', face.camera.orbit);
+      modelo3d.setAttribute('camera-target', face.camera.target);
+      modelo3d.setAttribute('field-of-view', face.camera.fov);
+      modelo3d.setAttribute('interaction-prompt', 'none');
+      modelo3d.setAttribute('camera-controls', '');
+
+      if (statusModelo) {
+        setarStatus('ok', `Visão aplicada: ${face.label}.`);
+      }
+    } catch (err) {
+      console.warn('Falha ao aplicar preset da câmera:', err);
+      if (statusModelo) {
+        setarStatus('warn', 'Não foi possível reposicionar a câmera automaticamente.');
+      }
+    }
   }
 
   /* ==========================================================
@@ -1487,6 +2035,32 @@ const pecasPreDefinidas = [
     previsualizacaoFoto.classList.remove('hidden');
   });
 
+
+  function validarChecklistFaceAtualLocal() {
+    return true;
+  }
+
+  function validarChecklistObrigatorioFaces3dLocal() {
+    return true;
+  }
+
+  // Bridge do escopo interno para o wizard global.
+  window.getChecklist3dFaces = () => CHECKLIST_3D_FACES;
+  window.getFace3dAtual = () => face3dAtual;
+  window.setFace3dAtual = (faceId) => {
+    if (!faceId) return face3dAtual;
+    if (!CHECKLIST_3D_FACES.some((f) => f.id === faceId)) return face3dAtual;
+    face3dAtual = faceId;
+    return face3dAtual;
+  };
+  window.renderizarFaces3d = renderizarFaces3d;
+  window.renderizarHotspots = renderizarHotspots;
+  window.aplicarPresetCameraFace = aplicarPresetCameraFace;
+  window.renderizarFotos360Guiadas = renderizarFotos360Guiadas;
+  window.renderizarRevisaoFotos360 = renderizarRevisaoFotos360;
+  window.validarEtapaInterior = validarEtapaInterior;
+  window.validarChecklistFaceAtualLocal = validarChecklistFaceAtualLocal;
+  window.validarChecklistObrigatorioFaces3dLocal = validarChecklistObrigatorioFaces3dLocal;
   /* ==========================================================
      CÂMERA (getUserMedia) — ALTA QUALIDADE
      ========================================================== */
@@ -1904,9 +2478,12 @@ const pecasPreDefinidas = [
       campos[id] = el.value ?? '';
     });
 
-    const checklist = $$('#items-checklist select').map((sel) => sel.value || '');
+    const checklistInterior = coletarChecklistDoContainer('interior-items-checklist');
+    const checklistLegado = coletarChecklistDoContainer('items-checklist');
+    const checklistFaces = coletarChecklistFaces3d();
+    const checklist = [...checklistInterior, ...checklistLegado, ...checklistFaces].map((item) => item.status || '');
     const fuelRange = document.getElementById('fuel-range');
-    const combustivel = Number(fuelRange?.value ?? 50);
+    const combustivel = Number(fuelRange?.value ?? 0);
 
     const avariasSerializadas = avarias.map((d) => ({
       pos3d: d.pos3d,
@@ -1944,6 +2521,10 @@ const pecasPreDefinidas = [
       telaAtual,
       campos,
       checklist,
+      checklistInterior,
+      checklistLegado,
+      checklistFaces,
+      checklistFaceState,
       combustivel,
       avarias: avariasSerializadas,
       fotos360,
@@ -1998,7 +2579,27 @@ const pecasPreDefinidas = [
       fuelRange.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
-    if (Array.isArray(draft.checklist)) {
+    if (Array.isArray(draft.checklistInterior)) {
+      $$('#interior-items-checklist select').forEach((sel, idx) => {
+        const item = draft.checklistInterior[idx];
+        const status = typeof item === 'string' ? item : item?.status;
+        sel.value = normalizarStatusChecklist(status);
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+
+        const card = sel.closest('[data-checklist-item]');
+        const notes = card?.querySelector('.checklist-notes');
+        if (notes && item && typeof item === 'object' && typeof item.observacao === 'string') {
+          notes.value = item.observacao;
+        }
+      });
+    }
+
+    if (Array.isArray(draft.checklistLegado)) {
+      $$('#items-checklist select').forEach((sel, idx) => {
+        const item = draft.checklistLegado[idx];
+        sel.value = typeof item === 'string' ? item : item?.status || '';
+      });
+    } else if (Array.isArray(draft.checklist)) {
       $$('#items-checklist select').forEach((sel, idx) => {
         if (typeof draft.checklist[idx] === 'string') {
           sel.value = draft.checklist[idx];
@@ -2020,6 +2621,15 @@ const pecasPreDefinidas = [
         st.previewUrl = null;
       });
       renderizarFotos360Guiadas();
+    }
+
+    if (draft.checklistFaceState && typeof draft.checklistFaceState === 'object') {
+      Object.entries(draft.checklistFaceState).forEach(([id, data]) => {
+        if (!checklistFaceState[id]) return;
+        const status = typeof data === 'string' ? data : data?.status;
+        checklistFaceState[id].status = normalizarStatusChecklist(status);
+      });
+      renderizarFaces3d();
     }
 
     window.ensureSignaturesReady?.();
@@ -2086,13 +2696,62 @@ const pecasPreDefinidas = [
   }
 
   function coletarChecklist(){
-    const linhas = $$('#items-checklist > div');
-    return linhas.map(l=>{
-      const nomeItem = l.querySelector('span')?.textContent?.trim() || '';
-      const select   = l.querySelector('select');
-      const status   = select ? (select.value || select.options[select.selectedIndex]?.text || '') : '';
-      return { item: nomeItem, status };
+    const interior = coletarChecklistDoContainer('interior-items-checklist').map((item) => ({
+      item: item.item,
+      status: item.status,
+    }));
+    const porFace = coletarChecklistFaces3d();
+    return [...interior, ...porFace].filter((item) => !!item.item);
+  }
+
+  function coletarChecklistFaces3d() {
+    const itens = [];
+
+    CHECKLIST_3D_FACES.forEach((face) => {
+      itensObrigatoriosDaFace(face.id).forEach((item) => {
+        const status = checklistFaceState[item.id]?.status || '';
+        if (!status) return;
+        itens.push({ item: item.label, status });
+      });
     });
+
+    return itens;
+  }
+
+  function coletarChecklistResumoConsolidado() {
+    const combustivel = coletarCombustivel();
+    const interiorPorId = Object.fromEntries(
+      coletarChecklistDoContainer('interior-items-checklist').map((item) => [item.id, item])
+    );
+
+    const facesPorId = Object.create(null);
+    Object.entries(checklistFaceState).forEach(([id, item]) => {
+      facesPorId[id] = item?.status || '';
+    });
+
+    const itensResumo = [
+      { item: 'Extintor de Incêndio', status: interiorPorId.extintor_incendio?.status || '-' },
+      { item: 'Rádio/CD/DVD', status: interiorPorId.radio_cd_dvd?.status || '-' },
+      { item: 'Tapetes', status: interiorPorId.tapetes?.status || '-' },
+      { item: 'Alarme', status: interiorPorId.alarme?.status || '-' },
+      { item: 'Acendedor de Cigarro', status: interiorPorId.acendedor_cigarro?.status || '-' },
+      { item: 'Retrovisor Interno', status: interiorPorId.retrovisor_interno?.status || '-' },
+      { item: 'Retirada de Pertences', status: interiorPorId.retirada_pertences?.status || '-' },
+      { item: 'Documentos do veículo', status: interiorPorId.documentos_veiculo?.status || '-' },
+      { item: 'Nível de Combustível', status: `${combustivel.combustivelPercentual ?? 0}%` },
+      {
+        item: 'Tanque de Combustível',
+        status: facesPorId.tanque_combustivel_confirmacao_direita || facesPorId.tanque_combustivel_esquerda || '-',
+      },
+      { item: 'Palheta Traseira', status: facesPorId.palheta_traseira || '-' },
+      { item: 'Estepe', status: facesPorId.estepe || '-' },
+      { item: 'Triângulo', status: facesPorId.triangulo || '-' },
+      { item: 'Macaco', status: facesPorId.macaco || '-' },
+      { item: 'Chave de Roda', status: facesPorId.chave_de_roda || '-' },
+      { item: 'Antena', status: facesPorId.antena || '-' },
+    ];
+
+    return itensResumo;
   }
 
   function coletarAssinaturas(){
@@ -2209,17 +2868,22 @@ const pecasPreDefinidas = [
     };
   }
 
-  /* ==========================================================
-     RESUMO (Tela 4)
-     ========================================================== */
+    /* ==========================================================
+      RESUMO (Etapa final)
+      ========================================================== */
   function renderResumo(){
     const wrap = $('#summary-content');
     if (!wrap) return;
 
     const cab = coletarCabecalho();
     const comb = coletarCombustivel();
-    const itens = coletarChecklist();
+    const itens = coletarChecklistResumoConsolidado();
     const avs = coletarAvarias();
+    const avsComPreview = avarias || [];
+    const fotos360Resumo = FOTOS_360_GUIADAS.map((p) => ({
+      ...p,
+      ...fotos360State[p.chave],
+    }));
 
     const resumoChecklist =
       itens.length
@@ -2232,13 +2896,27 @@ const pecasPreDefinidas = [
 
     const resumoAvarias =
       avs.length
-        ? avs.map((d, idx) => `
-            <div class="border border-slate-200 rounded-lg p-3 bg-white/70">
-              <p class="text-sm font-semibold text-slate-800">${idx+1}. ${d.peca || 'Peça'} – ${d.tipo || '-'}</p>
-              <p class="text-xs text-slate-600">${d.observacoes || 'Sem observações.'}</p>
-              ${d.fotoBase64 ? `<p class="text-[10px] text-slate-400 break-all mt-1">fotoBase64 (key): ${d.fotoBase64}</p>` : ''}
-            </div>`).join('')
+        ? avs.map((d, idx) => {
+            const preview = avsComPreview[idx]?.fotoPreviewUrl || null;
+            return `
+              <div class="border border-slate-200 rounded-lg p-3 bg-white/70">
+                <p class="text-sm font-semibold text-slate-800">${idx+1}. ${d.peca || 'Peça'} – ${d.tipo || '-'}</p>
+                <p class="text-xs text-slate-600">${d.observacoes || 'Sem observações.'}</p>
+                ${preview ? `<img src="${preview}" alt="Foto da avaria ${idx+1}" class="mt-2 rounded-lg border border-slate-200 max-h-36 w-auto">` : ''}
+                ${d.fotoBase64 ? `<p class="text-[10px] text-slate-400 break-all mt-1">key: ${d.fotoBase64}</p>` : ''}
+              </div>`;
+          }).join('')
         : '<p class="text-sm text-slate-500">Nenhuma avaria registrada.</p>';
+
+    const resumoFotos360 = fotos360Resumo.length
+      ? fotos360Resumo.map((f) => `
+          <div class="border border-slate-200 rounded-lg p-3 bg-white/70">
+            <p class="text-sm font-semibold text-slate-800">${f.titulo}</p>
+            ${f.previewUrl ? `<img src="${f.previewUrl}" alt="${f.titulo}" class="mt-2 rounded-lg border border-slate-200 max-h-28 w-auto">` : '<p class="text-xs text-slate-400 mt-2">Sem preview na sessão atual.</p>'}
+            ${f.foto ? `<p class="text-[10px] text-slate-400 break-all mt-1">key: ${f.foto}</p>` : '<p class="text-[10px] text-rose-500 mt-1">pendente</p>'}
+          </div>
+        `).join('')
+      : '<p class="text-sm text-slate-500">Nenhuma foto 360 registrada.</p>';
 
     wrap.innerHTML = `
       <section class="rounded-xl border border-slate-200 bg-white/60 p-4">
@@ -2260,24 +2938,27 @@ const pecasPreDefinidas = [
       </section>
 
       <section class="rounded-xl border border-slate-200 bg-white/60 p-4">
-        <h3 class="text-base font-semibold text-slate-800 mb-3">2) Inspeção</h3>
-        <p class="text-sm mb-3"><span class="font-medium text-slate-700">Nível de combustível:</span> ${comb.combustivelPercentual ?? 0}%</p>
-        <div class="space-y-2">
-          <p class="text-sm font-medium text-slate-700">Avarias registradas</p>
-          <div class="grid sm:grid-cols-2 gap-2">
-            ${resumoAvarias}
-          </div>
+        <h3 class="text-base font-semibold text-slate-800 mb-3">2) Checklist Consolidado</h3>
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-4">
+          ${resumoChecklist}
+        </div>
+        <div>
+          <p class="text-sm font-medium text-slate-700 mb-1">Observações</p>
+          <div class="text-sm whitespace-pre-line p-3 rounded-lg border border-slate-200 bg-white/70">${cab.observacoes || '—'}</div>
         </div>
       </section>
 
       <section class="rounded-xl border border-slate-200 bg-white/60 p-4">
-        <h3 class="text-base font-semibold text-slate-800 mb-3">3) Checklist</h3>
-        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          ${resumoChecklist}
+        <h3 class="text-base font-semibold text-slate-800 mb-3">3) Imagens de Avarias</h3>
+        <div class="grid sm:grid-cols-2 gap-2">
+          ${resumoAvarias}
         </div>
-        <div class="mt-4">
-          <p class="text-sm font-medium text-slate-700 mb-1">Observações</p>
-          <div class="text-sm whitespace-pre-line p-3 rounded-lg border border-slate-200 bg-white/70">${cab.observacoes || '—'}</div>
+      </section>
+
+      <section class="rounded-xl border border-slate-200 bg-white/60 p-4">
+        <h3 class="text-base font-semibold text-slate-800 mb-3">4) Imagens 360</h3>
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          ${resumoFotos360}
         </div>
       </section>
 
@@ -2397,15 +3078,33 @@ const pecasPreDefinidas = [
 
     const fuelRange = document.getElementById('fuel-range');
     if (fuelRange) {
-      fuelRange.value = 50;
+      fuelRange.value = 0;
       const ev = new Event('input', { bubbles: true });
       fuelRange.dispatchEvent(ev);
     }
+
+    $$('#interior-items-checklist select').forEach(sel=>{
+      sel.value = '';
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    $$('#interior-items-checklist .checklist-notes').forEach(note=>{
+      note.value = '';
+    });
 
     $$('#items-checklist select').forEach(sel=>{
       const ok = Array.from(sel.options).find(o => o.text === 'OK' || o.value === 'OK');
       sel.value = ok ? ok.value : sel.options[0]?.value;
     });
+
+    Object.keys(checklistFaceState).forEach((id) => {
+      checklistFaceState[id].status = '';
+    });
+    face3dAtual = CHECKLIST_3D_FACES[0]?.id || 'lateral_esquerda';
+    renderizarFaces3d();
+    renderizarHotspots();
+    aplicarPresetCameraFace(face3dAtual);
+    renderizarFotos360Guiadas();
 
     avarias.forEach((d) => {
       if (d?.fotoPreviewUrl) {
@@ -2726,7 +3425,10 @@ const pecasPreDefinidas = [
   });
 
   // Start
+  renderizarFaces3d();
   renderizarHotspots();
+  aplicarPresetCameraFace(face3dAtual);
   renderizarListaAvarias();
   renderizarFotos360Guiadas();
+  renderizarRevisaoFotos360();
 })();
