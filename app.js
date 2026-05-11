@@ -699,10 +699,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const btnNovo = document.getElementById('btn-novo-checklist');
   if (btnNovo) {
     btnNovo.addEventListener('click', () => {
+      console.log('[DRAFT] Clique em "Novo Checklist"')
       window.clearChecklistDraft?.();
       window.resetChecklistUI?.({ silent: true, goToList: false });
       telaAtual = 1;
+      console.log('[DRAFT] telaAtual definido para', telaAtual);
       atualizarWizardUI();
+      console.log('[DRAFT] Salvando novo rascunho...');
       window.persistChecklistDraft?.();
     });
   }
@@ -819,9 +822,14 @@ document.addEventListener('DOMContentLoaded', ()=>{
     li.addEventListener('click', ()=> irParaTela(Number(li.dataset.step)));
   });
 
+  console.log('[DRAFT] DOMContentLoaded: Tentando restaurar rascunho...');
   const restored = window.restoreChecklistDraft?.() === true;
+  console.log('[DRAFT] DOMContentLoaded: Restauração resultado =', restored);
   if (!restored) {
+    console.log('[DRAFT] DOMContentLoaded: Nenhum rascunho restaurado, atualizando UI');
     atualizarWizardUI();
+  } else {
+    console.log('[DRAFT] DOMContentLoaded: Rascunho restaurado com sucesso!');
   }
 });
 
@@ -1878,7 +1886,11 @@ const pecasPreDefinidas = [
   }
 
   function collectDraftSnapshot() {
-    if (telaAtual <= 0) return null;
+    console.log('[DRAFT] collectDraftSnapshot() chamado. telaAtual =', telaAtual);
+    if (telaAtual <= 0) {
+      console.log('[DRAFT] telaAtual <= 0, não coletando snapshot');
+      return null;
+    }
 
     const idsTexto = [
       'os_interna','entry_datetime','cli_nome','cli_doc','cli_tel','cli_end',
@@ -1927,7 +1939,7 @@ const pecasPreDefinidas = [
         : null,
     };
 
-    return {
+    const snapshot = {
       versao: 1,
       telaAtual,
       campos,
@@ -1938,22 +1950,36 @@ const pecasPreDefinidas = [
       assinaturas,
       atualizadoEm: Date.now(),
     };
+    console.log('[DRAFT] Snapshot coletado:', snapshot);
+    return snapshot;
   }
 
   function persistChecklistDraft() {
+    console.log('[DRAFT] persistChecklistDraft() chamado');
     const snapshot = collectDraftSnapshot();
-    if (!snapshot) return;
+    if (!snapshot) {
+      console.log('[DRAFT] Nenhum snapshot para salvar');
+      return;
+    }
 
     try {
-      sessionStorage.setItem(CHECKLIST_DRAFT_KEY, JSON.stringify(snapshot));
+      const json = JSON.stringify(snapshot);
+      console.log('[DRAFT] Tentando salvar em sessionStorage. Tamanho:', json.length, 'bytes');
+      sessionStorage.setItem(CHECKLIST_DRAFT_KEY, json);
+      console.log('[DRAFT] ✓ Rascunho salvo com sucesso em sessionStorage');
     } catch (err) {
-      console.warn('[CHECKLIST DRAFT] Falha ao salvar rascunho:', err);
+      console.error('[DRAFT] ✗ ERRO ao salvar rascunho:', err);
     }
   }
 
   function restoreChecklistDraft() {
+    console.log('[DRAFT] restoreChecklistDraft() chamado');
     const draft = getChecklistDraft();
-    if (!draft || !draft.campos || Number(draft.telaAtual) <= 0) return false;
+    console.log('[DRAFT] Draft recuperado:', draft);
+    if (!draft || !draft.campos || Number(draft.telaAtual) <= 0) {
+      console.log('[DRAFT] Nenhum draft válido para restaurar. Retornando false.');
+      return false;
+    }
 
     Object.entries(draft.campos).forEach(([id, value]) => {
       const el = document.getElementById(id);
@@ -2000,6 +2026,7 @@ const pecasPreDefinidas = [
     drawSignatureFromBase64('customer-signature', draft.assinaturas?.cliente || null);
     drawSignatureFromBase64('inspector-signature', draft.assinaturas?.responsavel || null);
 
+    console.log('[DRAFT] ✓ Draft restaurado com sucesso. Navegando para tela:', Number(draft.telaAtual));
     irParaTela(Number(draft.telaAtual));
     return true;
   }
@@ -2014,12 +2041,22 @@ const pecasPreDefinidas = [
   }
 
   document.addEventListener('input', () => {
-    if (telaAtual <= 0) return;
+    console.log('[DRAFT] Evento input detectado. telaAtual =', telaAtual);
+    if (telaAtual <= 0) {
+      console.log('[DRAFT] telaAtual <= 0, ignorando evento input');
+      return;
+    }
+    console.log('[DRAFT] Agendando salvamento de rascunho...');
     schedulePersistChecklistDraft();
   });
 
   document.addEventListener('change', () => {
-    if (telaAtual <= 0) return;
+    console.log('[DRAFT] Evento change detectado. telaAtual =', telaAtual);
+    if (telaAtual <= 0) {
+      console.log('[DRAFT] telaAtual <= 0, ignorando evento change');
+      return;
+    }
+    console.log('[DRAFT] Agendando salvamento de rascunho...');
     schedulePersistChecklistDraft();
   });
 
