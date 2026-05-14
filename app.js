@@ -174,7 +174,7 @@ function mostrarErroValidacaoWizard(mensagem = WIZARD_VALIDATION_MSG) {
   const box = document.getElementById('wizard-validation-message');
   if (!box) return;
   box.textContent = mensagem;
-  box.classList.remove('hidden');
+  box.classList.add('hidden');
 }
 
 function ocultarErroValidacaoWizard() {
@@ -3762,8 +3762,8 @@ const pecasPreDefinidas = [
         if (primeiroErro) {
           // Navegar para a tela com erro
           irParaTela(primeiroErro.telaDestino);
-          mostrarErroValidacaoWizard();
-          if (statusPost) statusPost.textContent = WIZARD_VALIDATION_MSG;
+          ocultarErroValidacaoWizard();
+          if (statusPost) statusPost.textContent = '';
           
           // Colocar foco no primeiro campo com erro (após um delay para a navegação acontecer)
           setTimeout(() => {
