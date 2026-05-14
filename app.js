@@ -269,17 +269,197 @@ async function finalizarChecklist() {
   }
 }
 
+/* ========== VALIDAÇÕES POR ETAPA ========== */
+
+/**
+ * Valida Tela 1 (Dados): O.S. Interna, Cliente (Nome, CPF/CNPJ, Tel, End), Veículo (Nome, Placa, Cor)
+ */
+function validarEtapaDados() {
+  const osInterna = $('#os_interna');
+  const cliNome = $('#cli_nome');
+  const cliDoc = $('#cli_doc');
+  const cliTel = $('#cli_tel');
+  const cliEnd = $('#cli_end');
+  const veicNome = $('#veic_nome');
+  const veicPlaca = $('#veic_placa');
+  const veicCor = $('#veic_cor');
+
+  const campos = [
+    { id: 'os_interna', label: 'O.S. Interna', input: osInterna, requerido: true },
+    { id: 'cli_nome', label: 'Nome do Cliente', input: cliNome, requerido: true },
+    { id: 'cli_doc', label: 'CPF/CNPJ', input: cliDoc, requerido: true },
+    { id: 'cli_tel', label: 'Telefone', input: cliTel, requerido: true },
+    { id: 'cli_end', label: 'Endereço', input: cliEnd, requerido: true },
+    { id: 'veic_nome', label: 'Veículo', input: veicNome, requerido: true },
+    { id: 'veic_placa', label: 'Placa', input: veicPlaca, requerido: true },
+    { id: 'veic_cor', label: 'Cor', input: veicCor, requerido: true },
+  ];
+
+  let primeiroInvalido = null;
+  let valido = true;
+  const faltantes = [];
+
+  for (const campo of campos) {
+    if (!campo.requerido) continue;
+    
+    const valor = (campo.input?.value ?? '').trim();
+    const grupo = campo.input?.closest('.fl-group');
+    
+    if (!valor) {
+      faltantes.push(campo.label);
+      valido = false;
+      if (grupo) grupo.classList.add('campo-invalido');
+      if (!primeiroInvalido) {
+        primeiroInvalido = campo.input;
+      }
+    } else {
+      if (grupo) grupo.classList.remove('campo-invalido');
+    }
+  }
+
+  if (!valido && primeiroInvalido) {
+    setTimeout(() => {
+      primeiroInvalido.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      primeiroInvalido.focus();
+    }, 100);
+    alert(`Preencha todos os campos obrigatórios da tela de Dados:\n\n${faltantes.join('\n')}`);
+  }
+
+  return valido;
+}
+
+/**
+ * Valida fotos 360 específicas por etapa/face
+ * Tela 3: Lateral Esquerda + Traseira lateral esquerda
+ * Tela 4: Traseira + Lateral direita traseira
+ * Tela 5: Lateral Direita + Frente lateral direita
+ */
+function validarFotos360PorEtapa(etapa) {
+  const FOTOS_POR_FACE = window.FOTOS_360_POR_FACE || {};
+  const faces = window.getChecklist3dFaces?.() || [];
+  
+  // Mapear etapa para face
+  const faceAtual = faces[etapa - 3]?.id; // tela 3 = faces[0], tela 4 = faces[1], etc
+  if (!faceAtual) return true; // Sem face mapeada, passar validação
+  
+  const fotosObrigatorias = FOTOS_POR_FACE[faceAtual] || [];
+  if (!fotosObrigatorias.length) return true;
+
+  // Verificar se as fotos obrigatórias foram capturadas
+  const fotos360StateGlobal = window.fotos360State || {};
+  const faltantes = [];
+
+  for (const chave of fotosObrigatorias) {
+    const fotoInfo = fotos360StateGlobal[chave];
+    if (!fotoInfo || !fotoInfo.foto) {
+      // Encontrar o título original
+      const fotoObj = FOTOS_360_GUIADAS?.find(p => p.chave === chave);
+      faltantes.push(fotoObj?.titulo || chave);
+    }
+  }
+
+  if (faltantes.length > 0) {
+    window.highlightFotos360Faltantes?.();
+    alert(`Finalize as fotos 360 obrigatórias antes de continuar.\n\nFaltando:\n${faltantes.join('\n')}`);
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Valida o checklist completo antes de "Concluir" (tela 7)
+ * Retorna um objeto com: { valido, erros: [{ etapa, mensagem, telaDestino }] }
+ */
+function validarChecklistCompleto() {
+  const erros = [];
+
+  // Validar Tela 1: Dados
+  if (!window.validarEtapaDados?.()) {
+    erros.push({
+      etapa: 'Dados',
+      telaDestino: 1,
+      mensagem: 'Preencha todos os dados da tela de Dados',
+    });
+  }
+
+  // Validar Tela 2: Interior (KM + Checklist)
+  if (!window.validarEtapaInterior?.()) {
+    erros.push({
+      etapa: 'Interior',
+      telaDestino: 2,
+      mensagem: 'Preencha o KM, combustível e itens obrigatórios do Interior',
+    });
+  }
+
+  // Validar Telas 3-6: Faces 3D + Fotos 360 por etapa
+  const faces = window.getChecklist3dFaces?.() || [];
+  for (let i = 0; i < faces.length; i++) {
+    const face = faces[i];
+    const telaDestino = i + 3; // telas 3, 4, 5, 6
+    
+    // Validar itens obrigatórios da face
+    const itens = window.itensObrigatoriosDaFace?.(face.id) || [];
+    const checklistState = window.checklistFaceState || {};
+    
+    for (const item of itens) {
+      const estado = checklistState[item.id]?.status;
+      if (!estado) {
+        erros.push({
+          etapa: face.label,
+          telaDestino,
+          mensagem: `Preencha o item obrigatório: ${item.label}`,
+        });
+        break; // Um erro por face é suficiente
+      }
+    }
+
+    // Validar fotos 360 da etapa (exceto para tela 6 que valida tudo)
+    if (telaDestino < 6) {
+      if (!window.validarFotos360PorEtapa?.(telaDestino)) {
+        erros.push({
+          etapa: face.label,
+          telaDestino,
+          mensagem: `Capture as fotos 360 obrigatórias`,
+        });
+      }
+    }
+  }
+
+  return {
+    valido: erros.length === 0,
+    erros,
+  };
+}
+
+// Expor funções para o escopo global
+window.validarEtapaDados = validarEtapaDados;
+window.validarFotos360PorEtapa = validarFotos360PorEtapa;
+window.validarChecklistCompleto = validarChecklistCompleto;
+
 function proximaTela() {
+  // Validar tela de Dados (tela 1)
+  if (telaAtual === 1 && !(window.validarEtapaDados?.() ?? true)) {
+    return;
+  }
+
+  // Validar tela de Interior (tela 2)
   if (telaAtual === 2 && !(window.validarEtapaInterior?.() ?? true)) {
     return;
   }
 
+  // Validar telas de 3D (telas 3, 4, 5 = faces)
   if (telaAtual >= 3 && telaAtual <= 5) {
     if (!(window.validarChecklistFaceAtualLocal?.() ?? true)) {
       return;
     }
+    // Validar fotos 360 por etapa
+    if (!window.validarFotos360PorEtapa?.(telaAtual)) {
+      return;
+    }
   }
 
+  // Validar frente (tela 6)
   if (telaAtual === 6) {
     if (!(window.validarChecklistObrigatorioFaces3dLocal?.() ?? true)) {
       return;
@@ -2167,6 +2347,11 @@ const pecasPreDefinidas = [
   window.validarEtapaInterior = validarEtapaInterior;
   window.validarChecklistFaceAtualLocal = validarChecklistFaceAtualLocal;
   window.validarChecklistObrigatorioFaces3dLocal = validarChecklistObrigatorioFaces3dLocal;
+  window.itensObrigatoriosDaFace = itensObrigatoriosDaFace;
+  window.checklistFaceState = checklistFaceState;
+  window.fotos360State = fotos360State;
+  window.CHECKLIST_OBRIGATORIO_POR_FACE = CHECKLIST_OBRIGATORIO_POR_FACE;
+  window.FOTOS_360_POR_FACE = FOTOS_360_POR_FACE;
   /* ==========================================================
      CÂMERA (getUserMedia) — ALTA QUALIDADE
      ========================================================== */
@@ -3506,9 +3691,39 @@ const pecasPreDefinidas = [
     try {
       botaoSendApi.disabled = true;
       const labelOrig = botaoSendApi.textContent;
-      botaoSendApi.textContent = 'Enviando...';
+      botaoSendApi.textContent = 'Validando...';
       if (statusPost) statusPost.textContent = '';
 
+      // Validar checklist completo antes de enviar
+      const validacao = window.validarChecklistCompleto?.();
+      if (!validacao?.valido) {
+        // Erro encontrado
+        const erros = validacao?.erros || [];
+        const primeiroErro = erros[0];
+        
+        if (primeiroErro) {
+          // Navegar para a tela com erro
+          irParaTela(primeiroErro.telaDestino);
+          
+          // Mostrar mensagem de erro
+          const mensagemCompleta = `Checklist incompleto!\n\nPreencha os campos obrigatórios:\n${erros.map(e => `- ${e.etapa}: ${e.mensagem}`).join('\n')}`;
+          alert(mensagemCompleta);
+          
+          // Colocar foco no primeiro campo com erro (após um delay para a navegação acontecer)
+          setTimeout(() => {
+            if (primeiroErro.telaDestino === 1) {
+              window.validarEtapaDados?.();
+            } else if (primeiroErro.telaDestino === 2) {
+              window.validarEtapaInterior?.();
+            }
+          }, 100);
+        }
+        
+        botaoSendApi.textContent = labelOrig;
+        return;
+      }
+
+      botaoSendApi.textContent = 'Enviando...';
       const body = await montarPayloadParaApi();
       const resp = await postJson(API_URL, body, { timeoutMs: 20000 });
       console.log('[POST /checklists] resp:', resp);

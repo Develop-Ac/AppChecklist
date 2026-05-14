@@ -152,6 +152,19 @@ select.campo-invalido {
   box-shadow: 0 0 0 3px rgba(239,68,68,.18) !important;
   background: rgba(239,68,68,.04) !important;
 }
+.fl-group.campo-invalido {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239,68,68,.18) !important;
+  background: rgba(239,68,68,.04) !important;
+}
+.select-wrap.campo-invalido {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239,68,68,.18) !important;
+}
+.select-wrap.campo-invalido select {
+  border-color: #ef4444 !important;
+  background: rgba(239,68,68,.04) !important;
+}
 .foto360-invalido {
   border-color: #ef4444 !important;
   box-shadow: 0 0 0 3px rgba(239,68,68,.15) !important;
