@@ -145,6 +145,26 @@ input[type="range"]::-moz-range-thumb{
 /* garante consistência de cálculo da largura */
 .nice-select{ width:100%; box-sizing:border-box; }
 
+/* ---------- Validação - campo inválido ---------- */
+.campo-invalido .nice-select,
+select.campo-invalido {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239,68,68,.18) !important;
+  background: rgba(239,68,68,.04) !important;
+}
+.foto360-invalido {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239,68,68,.15) !important;
+}
+.foto360-invalido .foto360-capturar {
+  background: #dc2626 !important;
+}
+.fl-input.campo-invalido,
+input.campo-invalido,
+textarea.campo-invalido {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239,68,68,.18) !important;
+}
 #customer-signature,
 #inspector-signature,
 #delivery-signature {

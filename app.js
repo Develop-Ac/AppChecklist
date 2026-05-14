@@ -322,6 +322,7 @@ function validarEtapaFotos360() {
   const faltantes = window.getFotos360MissingTitles?.() || [];
   if (!faltantes.length) return true;
 
+  window.highlightFotos360Faltantes?.();
   alert(`Finalize as fotos 360 antes de continuar.\n\nFaltando:\n${faltantes.join('\n')}`);
   return false;
 }
@@ -1368,6 +1369,30 @@ const pecasPreDefinidas = [
   window.getFotos360MissingTitles = () => fotos360Pendentes().map((p) => `Foto ${p.ordem}: ${p.titulo}`);
   window.resetFotos360State = limparFotos360State;
 
+  function highlightFotos360Faltantes() {
+    const items = document.querySelectorAll('[data-foto360-item]');
+    let primeiroFaltante = null;
+
+    items.forEach((article) => {
+      const chave = article.dataset.foto360Item;
+      const temFoto = !!fotos360State[chave]?.foto;
+      if (!temFoto) {
+        article.classList.add('foto360-invalido');
+        if (!primeiroFaltante) primeiroFaltante = article;
+      } else {
+        article.classList.remove('foto360-invalido');
+      }
+    });
+
+    if (primeiroFaltante) {
+      primeiroFaltante.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const btn = primeiroFaltante.querySelector('.foto360-capturar');
+      if (btn) btn.focus();
+    }
+  }
+
+  window.highlightFotos360Faltantes = highlightFotos360Faltantes;
+
   /* ---------- Utils ---------- */
   const normalizarOuCima = (v)=>{
     const L = Math.hypot(v?.x||0, v?.y||0, v?.z||0);
@@ -1716,6 +1741,13 @@ const pecasPreDefinidas = [
     checklistFaceState[itemId].status = normalizarStatusChecklist(selectChecklistFace.value);
 
     // Se o tanque da esquerda deixar de ser N/A, limpamos confirmação da direita.
+        // Remove error highlight when user fills the field
+        if (selectChecklistFace.value) {
+          const wrap = selectChecklistFace.closest('.select-wrap');
+          if (wrap) wrap.classList.remove('campo-invalido');
+        }
+
+        // Se o tanque da esquerda deixar de ser N/A, limpamos confirmação da direita.
     if (itemId === 'tanque_combustivel_esquerda' && !tanqueCombustivelEsquerdaEhNA()) {
       if (checklistFaceState.tanque_combustivel_confirmacao_direita) {
         checklistFaceState.tanque_combustivel_confirmacao_direita.status = '';
@@ -2045,11 +2077,77 @@ const pecasPreDefinidas = [
 
 
   function validarChecklistFaceAtualLocal() {
-    return true;
+    const itens = itensObrigatoriosDaFace(face3dAtual);
+    if (!itens.length) return true;
+
+    let primeiroInvalido = null;
+    let valido = true;
+
+    for (const item of itens) {
+      const sel = document.querySelector(`[data-face-check-item="${item.id}"]`);
+      if (!sel) continue;
+      const estado = checklistFaceState[item.id]?.status;
+      const wrap = sel.closest('.select-wrap');
+      if (!estado) {
+        valido = false;
+        if (wrap) wrap.classList.add('campo-invalido');
+        if (!primeiroInvalido) primeiroInvalido = sel;
+      } else {
+        if (wrap) wrap.classList.remove('campo-invalido');
+      }
+    }
+
+    if (!valido && primeiroInvalido) {
+      primeiroInvalido.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      primeiroInvalido.focus();
+    }
+
+    return valido;
   }
 
   function validarChecklistObrigatorioFaces3dLocal() {
-    return true;
+    let primeiraFaceInvalida = null;
+    let valido = true;
+    const facesPendentes = [];
+
+    for (const face of CHECKLIST_3D_FACES) {
+      const itens = itensObrigatoriosDaFace(face.id);
+      for (const item of itens) {
+        const estado = checklistFaceState[item.id]?.status;
+        if (!estado) {
+          if (!primeiraFaceInvalida) primeiraFaceInvalida = face;
+          if (!facesPendentes.includes(face.label)) facesPendentes.push(face.label);
+          valido = false;
+        }
+      }
+    }
+
+    if (!valido && primeiraFaceInvalida) {
+      face3dAtual = primeiraFaceInvalida.id;
+      renderizarFaces3d();
+      renderizarHotspots();
+      aplicarPresetCameraFace(face3dAtual);
+      renderizarFotos360Guiadas();
+
+      const itens = itensObrigatoriosDaFace(primeiraFaceInvalida.id);
+      for (const item of itens) {
+        if (!checklistFaceState[item.id]?.status) {
+          const sel = document.querySelector(`[data-face-check-item="${item.id}"]`);
+          if (sel) {
+            const wrap = sel.closest('.select-wrap');
+            if (wrap) wrap.classList.add('campo-invalido');
+            setTimeout(() => {
+              sel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              sel.focus();
+            }, 150);
+          }
+        }
+      }
+
+      alert(`Preencha todos os itens obrigatórios do checklist antes de continuar.\n\nFaces com itens pendentes:\n${facesPendentes.join('\n')}`);
+    }
+
+    return valido;
   }
 
   // Bridge do escopo interno para o wizard global.
