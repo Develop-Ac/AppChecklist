@@ -168,6 +168,52 @@ function faceDaTelaWizard(tela) {
   return null;
 }
 
+const WIZARD_VALIDATION_MSG = 'Preencha todos os Campos em Destaque para poder avançar';
+
+function mostrarErroValidacaoWizard(mensagem = WIZARD_VALIDATION_MSG) {
+  const box = document.getElementById('wizard-validation-message');
+  if (!box) return;
+  box.textContent = mensagem;
+  box.classList.remove('hidden');
+}
+
+function ocultarErroValidacaoWizard() {
+  const box = document.getElementById('wizard-validation-message');
+  if (!box) return;
+  box.classList.add('hidden');
+}
+
+function validarTelaAtualAntesDeNavegar() {
+  if (telaAtual === 0 || telaAtual === 7) {
+    ocultarErroValidacaoWizard();
+    return true;
+  }
+
+  let valido = true;
+
+  if (telaAtual === 1) {
+    valido = window.validarEtapaDados?.() ?? true;
+  } else if (telaAtual === 2) {
+    valido = window.validarEtapaInterior?.() ?? true;
+  } else if (telaAtual >= 3 && telaAtual <= 5) {
+    const checklistValido = window.validarChecklistFaceAtualLocal?.() ?? true;
+    const fotosValidas = window.validarFotos360PorEtapa?.(telaAtual) ?? true;
+    valido = checklistValido && fotosValidas;
+  } else if (telaAtual === 6) {
+    const checklistFacesValido = window.validarChecklistObrigatorioFaces3dLocal?.() ?? true;
+    const fotosCompletas = validarEtapaFotos360();
+    valido = checklistFacesValido && fotosCompletas;
+  }
+
+  if (!valido) {
+    mostrarErroValidacaoWizard();
+  } else {
+    ocultarErroValidacaoWizard();
+  }
+
+  return valido;
+}
+
 function atualizarWizardUI() {
   $$('.tela').forEach(sec=>{
     const n = Number(sec.dataset.tela);
@@ -235,6 +281,7 @@ function atualizarWizardUI() {
 
 function irParaTela(n) {
   telaAtual = Math.max(0, Math.min(totalTelas, n));
+  ocultarErroValidacaoWizard();
   atualizarWizardUI();
   window.requestAnimationFrame(() => {
     window.scrollTo(0, 0);
@@ -297,8 +344,6 @@ function validarEtapaDados() {
 
   let primeiroInvalido = null;
   let valido = true;
-  const faltantes = [];
-
   for (const campo of campos) {
     if (!campo.requerido) continue;
     
@@ -306,7 +351,6 @@ function validarEtapaDados() {
     const grupo = campo.input?.closest('.fl-group');
     
     if (!valor) {
-      faltantes.push(campo.label);
       valido = false;
       if (grupo) grupo.classList.add('campo-invalido');
       if (!primeiroInvalido) {
@@ -322,7 +366,6 @@ function validarEtapaDados() {
       primeiroInvalido.scrollIntoView({ behavior: 'smooth', block: 'center' });
       primeiroInvalido.focus();
     }, 100);
-    alert(`Preencha todos os campos obrigatórios da tela de Dados:\n\n${faltantes.join('\n')}`);
   }
 
   return valido;
@@ -360,7 +403,6 @@ function validarFotos360PorEtapa(etapa) {
 
   if (faltantes.length > 0) {
     window.highlightFotos360Faltantes?.();
-    alert(`Finalize as fotos 360 obrigatórias antes de continuar.\n\nFaltando:\n${faltantes.join('\n')}`);
     return false;
   }
 
@@ -438,36 +480,8 @@ window.validarFotos360PorEtapa = validarFotos360PorEtapa;
 window.validarChecklistCompleto = validarChecklistCompleto;
 
 function proximaTela() {
-  // Validar tela de Dados (tela 1)
-  if (telaAtual === 1 && !(window.validarEtapaDados?.() ?? true)) {
+  if (!validarTelaAtualAntesDeNavegar()) {
     return;
-  }
-
-  // Validar tela de Interior (tela 2)
-  if (telaAtual === 2 && !(window.validarEtapaInterior?.() ?? true)) {
-    return;
-  }
-
-  // Validar telas de 3D (telas 3, 4, 5 = faces)
-  if (telaAtual >= 3 && telaAtual <= 5) {
-    if (!(window.validarChecklistFaceAtualLocal?.() ?? true)) {
-      return;
-    }
-    // Validar fotos 360 por etapa
-    if (!window.validarFotos360PorEtapa?.(telaAtual)) {
-      return;
-    }
-  }
-
-  // Validar frente (tela 6)
-  if (telaAtual === 6) {
-    if (!(window.validarChecklistObrigatorioFaces3dLocal?.() ?? true)) {
-      return;
-    }
-
-    if (!validarEtapaFotos360()) {
-      return;
-    }
   }
 
   if (telaAtual < totalTelas) {
@@ -503,7 +517,6 @@ function validarEtapaFotos360() {
   if (!faltantes.length) return true;
 
   window.highlightFotos360Faltantes?.();
-  alert(`Finalize as fotos 360 antes de continuar.\n\nFaltando:\n${faltantes.join('\n')}`);
   return false;
 }
 
@@ -1102,7 +1115,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
   $('#btn-prev')?.addEventListener('click', telaAnterior);
   $('#btn-next')?.addEventListener('click', proximaTela);
   $$('.wizard-steps li').forEach(li=>{
-    li.addEventListener('click', ()=> irParaTela(Number(li.dataset.step)));
+    li.addEventListener('click', ()=> {
+      const destino = Number(li.dataset.step);
+      if (destino === telaAtual) return;
+      if (!validarTelaAtualAntesDeNavegar()) return;
+      irParaTela(destino);
+    });
   });
 
   console.log('[DRAFT] DOMContentLoaded: Tentando restaurar rascunho...');
@@ -1810,25 +1828,66 @@ const pecasPreDefinidas = [
   }
 
   function validarEtapaInterior() {
+    const kmInput = document.getElementById('veic_km');
     const fuelRange = document.getElementById('fuel-range');
+    const kmValue = toIntOrNull(kmInput?.value);
     const fuelValue = toIntOrNull(fuelRange?.value);
+    let primeiroInvalido = null;
+    let valido = true;
+
+    if (kmInput) {
+      const kmGroup = kmInput.closest('.fl-group');
+      const kmValido = kmValue !== null && kmValue >= 0 && kmValue <= 9999999;
+      if (!kmValido) {
+        valido = false;
+        kmGroup?.classList.add('campo-invalido');
+        kmInput.classList.add('campo-invalido');
+        if (!primeiroInvalido) primeiroInvalido = kmInput;
+      } else {
+        kmGroup?.classList.remove('campo-invalido');
+        kmInput.classList.remove('campo-invalido');
+      }
+    }
 
     if (fuelValue === null || fuelValue < 0 || fuelValue > 100) {
-      alert('Informe um nível de combustível válido entre 0% e 100%.');
-      fuelRange?.focus?.();
-      return false;
+      valido = false;
+      fuelRange?.classList.add('campo-invalido');
+      if (!primeiroInvalido) primeiroInvalido = fuelRange;
+    } else {
+      fuelRange?.classList.remove('campo-invalido');
     }
 
     const statusChecklist = coletarChecklistInterior();
-    const obsPendente = statusChecklist.find((item) => (item.status === 'Avariado' || item.status === 'Ausente') && !item.observacao);
-    if (obsPendente) {
-      alert(`Informe a observação do item: ${obsPendente.item}.`);
-      const obs = document.querySelector(`[data-checklist-item="${obsPendente.id}"] .checklist-notes`);
-      obs?.focus?.();
-      return false;
+    for (const item of statusChecklist) {
+      const card = document.querySelector(`[data-checklist-item="${item.id}"]`);
+      const select = card?.querySelector('.checklist-status');
+      const wrap = select?.closest('.select-wrap');
+      const obs = card?.querySelector('.checklist-notes');
+      const precisaObs = item.status === 'Avariado' || item.status === 'Ausente';
+
+      if (!item.status) {
+        valido = false;
+        wrap?.classList.add('campo-invalido');
+        if (!primeiroInvalido) primeiroInvalido = select;
+      } else {
+        wrap?.classList.remove('campo-invalido');
+      }
+
+      if (precisaObs && !item.observacao) {
+        valido = false;
+        obs?.classList.add('campo-invalido');
+        if (!primeiroInvalido) primeiroInvalido = obs;
+      } else {
+        obs?.classList.remove('campo-invalido');
+      }
     }
 
-    return true;
+    if (!valido && primeiroInvalido) {
+      primeiroInvalido.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      primeiroInvalido.focus?.();
+    }
+
+    return valido;
   }
 
   function renderizarFaces3d() {
@@ -2324,7 +2383,6 @@ const pecasPreDefinidas = [
         }
       }
 
-      alert(`Preencha todos os itens obrigatórios do checklist antes de continuar.\n\nFaces com itens pendentes:\n${facesPendentes.join('\n')}`);
     }
 
     return valido;
@@ -3704,10 +3762,8 @@ const pecasPreDefinidas = [
         if (primeiroErro) {
           // Navegar para a tela com erro
           irParaTela(primeiroErro.telaDestino);
-          
-          // Mostrar mensagem de erro
-          const mensagemCompleta = `Checklist incompleto!\n\nPreencha os campos obrigatórios:\n${erros.map(e => `- ${e.etapa}: ${e.mensagem}`).join('\n')}`;
-          alert(mensagemCompleta);
+          mostrarErroValidacaoWizard();
+          if (statusPost) statusPost.textContent = WIZARD_VALIDATION_MSG;
           
           // Colocar foco no primeiro campo com erro (após um delay para a navegação acontecer)
           setTimeout(() => {

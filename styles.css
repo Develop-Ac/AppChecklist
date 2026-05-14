@@ -148,26 +148,29 @@ input[type="range"]::-moz-range-thumb{
 /* ---------- Validação - campo inválido ---------- */
 .campo-invalido .nice-select,
 select.campo-invalido {
-  border-color: #ef4444 !important;
-  box-shadow: 0 0 0 3px rgba(239,68,68,.18) !important;
-  background: rgba(239,68,68,.04) !important;
+  border-color: rgba(239, 68, 68, 0.55) !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.16), 0 8px 20px rgba(239, 68, 68, 0.12) !important;
+  background: rgba(239, 68, 68, 0.03) !important;
+  border-radius: .75rem !important;
 }
 .fl-group.campo-invalido {
-  border-color: #ef4444 !important;
-  box-shadow: 0 0 0 3px rgba(239,68,68,.18) !important;
-  background: rgba(239,68,68,.04) !important;
+  border-color: rgba(239, 68, 68, 0.45) !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.12), 0 8px 20px rgba(239, 68, 68, 0.10) !important;
+  background: rgba(239, 68, 68, 0.03) !important;
+  border-radius: .9rem !important;
 }
 .select-wrap.campo-invalido {
-  border-color: #ef4444 !important;
-  box-shadow: 0 0 0 3px rgba(239,68,68,.18) !important;
+  border-radius: .75rem;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.14), 0 6px 16px rgba(239, 68, 68, 0.10) !important;
 }
 .select-wrap.campo-invalido select {
-  border-color: #ef4444 !important;
-  background: rgba(239,68,68,.04) !important;
+  border-color: rgba(239, 68, 68, 0.55) !important;
+  background: rgba(239, 68, 68, 0.03) !important;
+  border-radius: .75rem !important;
 }
 .foto360-invalido {
-  border-color: #ef4444 !important;
-  box-shadow: 0 0 0 3px rgba(239,68,68,.15) !important;
+  border-color: rgba(239, 68, 68, 0.55) !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.12), 0 8px 18px rgba(239, 68, 68, 0.10) !important;
 }
 .foto360-invalido .foto360-capturar {
   background: #dc2626 !important;
@@ -175,8 +178,21 @@ select.campo-invalido {
 .fl-input.campo-invalido,
 input.campo-invalido,
 textarea.campo-invalido {
-  border-color: #ef4444 !important;
-  box-shadow: 0 0 0 3px rgba(239,68,68,.18) !important;
+  border-color: rgba(239, 68, 68, 0.55) !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.16), 0 8px 20px rgba(239, 68, 68, 0.12) !important;
+  background: rgba(239, 68, 68, 0.03) !important;
+  border-radius: .75rem !important;
+}
+.wizard-validation-message {
+  margin-top: .65rem;
+  padding: .5rem .75rem;
+  border-radius: .65rem;
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  background: rgba(220, 38, 38, 0.06);
+  color: #b91c1c;
+  font-size: .9rem;
+  font-weight: 600;
+  text-align: center;
 }
 #customer-signature,
 #inspector-signature,
