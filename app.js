@@ -25,6 +25,34 @@ const INTRANET_CHECKLISTS_URL = `${INTRANET_API_BASE}/checklists`;
 const ORDEM_SERVICO_BASE_URL = `${API_BASE}/ordens-servico`;
 const CHECKLIST_DRAFT_KEY = 'oficina-checklist-draft-v1';
 const CUIABA_TIMEZONE = 'America/Cuiaba';
+const MODEL_VIEWER_CDN_URL = 'https://unpkg.com/@google/model-viewer@3.3.0/dist/model-viewer.min.js';
+const MODEL_3D_LOCAL_URL = '/models/carro.glb';
+
+let warmupModelo3dEmAndamento = null;
+
+async function aquecerCacheModelo3dListagem() {
+  if (!navigator.onLine) return;
+  if (warmupModelo3dEmAndamento) return warmupModelo3dEmAndamento;
+
+  warmupModelo3dEmAndamento = (async () => {
+    const tarefas = [
+      fetch(MODEL_3D_LOCAL_URL, { cache: 'reload' }),
+      fetch(MODEL_VIEWER_CDN_URL, { mode: 'no-cors', cache: 'reload' }),
+    ];
+
+    const resultados = await Promise.allSettled(tarefas);
+    const falhas = resultados.filter((r) => r.status === 'rejected').length;
+    if (falhas > 0) {
+      console.warn(`[CACHE 3D] Warmup concluido com ${falhas} falha(s).`);
+    }
+  })();
+
+  try {
+    await warmupModelo3dEmAndamento;
+  } finally {
+    warmupModelo3dEmAndamento = null;
+  }
+}
 
 function formatDateTimeForCuiaba(date = new Date()) {
   try {
@@ -300,6 +328,12 @@ function atualizarWizardUI() {
   if (telaAtual === 7) {
     window.ensureSignaturesReady?.();
     window.renderResumo?.();
+  }
+
+  if (telaAtual === 0) {
+    aquecerCacheModelo3dListagem().catch((err) => {
+      console.warn('[CACHE 3D] Falha no warmup da listagem:', err);
+    });
   }
 }
 
@@ -1144,7 +1178,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (text) text.textContent = online ? 'Online' : 'Offline – salvando localmente';
   }
   atualizarStatusRede();
-  window.addEventListener('online',  () => { atualizarStatusRede(); window.atualizarContadorPendentes?.(); });
+  window.addEventListener('online',  () => {
+    atualizarStatusRede();
+    window.atualizarContadorPendentes?.();
+    if (telaAtual === 0) {
+      aquecerCacheModelo3dListagem().catch((err) => {
+        console.warn('[CACHE 3D] Falha ao aquecer cache apos reconexao:', err);
+      });
+    }
+  });
   window.addEventListener('offline', () => atualizarStatusRede());
 
   // ── Botão abrir sync ─────────────────────────────────────────
