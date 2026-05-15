@@ -673,10 +673,24 @@
 
   <script>
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch((err) => {
+      window.addEventListener('load', async () => {
+        try {
+          await navigator.serviceWorker.register('/sw.js');
+
+          // Na primeira instalação, a página ainda não fica controlada pelo SW.
+          // Recarrega uma única vez para garantir que o warmup da tela 0 use cache do SW.
+          await navigator.serviceWorker.ready;
+          if (
+            navigator.onLine &&
+            !navigator.serviceWorker.controller &&
+            !sessionStorage.getItem('sw-first-control-reload')
+          ) {
+            sessionStorage.setItem('sw-first-control-reload', '1');
+            window.location.reload();
+          }
+        } catch (err) {
           console.warn('Falha ao registrar Service Worker:', err);
-        });
+        }
       });
     }
   </script>

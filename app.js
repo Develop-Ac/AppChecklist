@@ -35,6 +35,21 @@ async function aquecerCacheModelo3dListagem() {
   if (warmupModelo3dEmAndamento) return warmupModelo3dEmAndamento;
 
   warmupModelo3dEmAndamento = (async () => {
+    // Prioriza comando explicito ao SW para garantir persistencia em Cache Storage.
+    if ('serviceWorker' in navigator) {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const worker = reg.active || reg.waiting || reg.installing;
+        worker?.postMessage({
+          type: 'CACHE_MODEL_3D_ASSETS',
+          urls: [MODEL_3D_LOCAL_URL, MODEL_VIEWER_CDN_URL],
+        });
+      } catch (err) {
+        console.warn('[CACHE 3D] SW nao disponivel para warmup explicito:', err);
+      }
+    }
+
+    // Fallback para acionar downloads mesmo sem controle imediato do SW.
     const tarefas = [
       fetch(MODEL_3D_LOCAL_URL, { cache: 'reload' }),
       fetch(MODEL_VIEWER_CDN_URL, { mode: 'no-cors', cache: 'reload' }),
