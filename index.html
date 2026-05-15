@@ -395,6 +395,25 @@
             </div>
           </div>
 
+          <!-- UI de Progresso de Upload (Fase 4) -->
+          <div id="upload-progress" class="hidden mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-4 sm:p-5 shadow-sm">
+            <div class="flex items-center gap-3">
+              <!-- Ícone Girando -->
+              <svg class="h-5 w-5 text-blue-600 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              
+              <!-- Texto e Barra -->
+              <div class="flex-1 min-w-0">
+                <p id="upload-progress-text" class="text-sm font-semibold text-blue-800 mb-2">Enviando imagens 0/0...</p>
+                <div class="w-full bg-blue-200 rounded-full h-2">
+                  <div id="upload-progress-fill" class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Ações (somente na última tela) -->
           <section class="mt-6">
             <div class="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur p-3 sm:p-4 shadow-lg flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
