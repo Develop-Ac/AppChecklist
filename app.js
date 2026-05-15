@@ -335,7 +335,7 @@ function validarEtapaDados() {
     { id: 'os_interna', label: 'O.S. Interna', input: osInterna, requerido: true },
     { id: 'cli_nome', label: 'Nome do Cliente', input: cliNome, requerido: true },
     { id: 'cli_doc', label: 'CPF/CNPJ', input: cliDoc, requerido: true },
-    { id: 'cli_tel', label: 'Telefone', input: cliTel, requerido: true },
+    { id: 'cli_tel', label: 'Telefone', input: cliTel, requerido: false },
     { id: 'cli_end', label: 'Endereço', input: cliEnd, requerido: true },
     { id: 'veic_nome', label: 'Veículo', input: veicNome, requerido: true },
     { id: 'veic_placa', label: 'Placa', input: veicPlaca, requerido: true },
