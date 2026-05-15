@@ -24,6 +24,7 @@ const UPLOADS_BASE_URL = `${API_BASE}/uploads`;
 const INTRANET_CHECKLISTS_URL = `${INTRANET_API_BASE}/checklists`;
 const ORDEM_SERVICO_BASE_URL = `${API_BASE}/ordens-servico`;
 const CHECKLIST_DRAFT_KEY = 'oficina-checklist-draft-v1';
+const CUIABA_TIMEZONE = 'America/Cuiaba';
 
 function formatDateTimeForCuiaba(date = new Date()) {
   try {
@@ -46,6 +47,17 @@ function formatDateTimeForCuiaba(date = new Date()) {
   } catch {
     const fallback = new Date(date.getTime() - (4 * 60 * 60 * 1000));
     return fallback.toISOString().slice(0, 16);
+  }
+}
+
+function formatarDataHoraCuiaba(valor) {
+  if (!valor) return '-';
+  try {
+    const d = valor instanceof Date ? valor : new Date(valor);
+    if (isNaN(d.getTime())) return '-';
+    return d.toLocaleString('pt-BR', { timeZone: CUIABA_TIMEZONE });
+  } catch {
+    return '-';
   }
 }
 
@@ -546,12 +558,7 @@ let deliveryPhotosFlat = [];
 let deliveryLightboxIndex = 0;
 
 function formatarDataHora(valor) {
-  if (!valor) return '-';
-  try {
-    return new Date(valor).toLocaleString('pt-BR');
-  } catch {
-    return '-';
-  }
+  return formatarDataHoraCuiaba(valor);
 }
 
 function sanitizeHtml(texto) {
@@ -3329,7 +3336,7 @@ const pecasPreDefinidas = [
         <h3 class="text-base font-semibold text-slate-800 mb-3">1) Identificação</h3>
         <div class="grid sm:grid-cols-2 gap-y-2 text-sm">
           <div><span class="font-medium text-slate-700">O.S Interna:</span> ${cab.osInterna || '-'}</div>
-          <div><span class="font-medium text-slate-700">Entrada:</span> ${cab.dataHoraEntrada ? new Date(cab.dataHoraEntrada).toLocaleString('pt-BR') : '-'}</div>
+          <div><span class="font-medium text-slate-700">Entrada:</span> ${formatarDataHoraCuiaba(cab.dataHoraEntrada)}</div>
           <div class="sm:col-span-2 h-px bg-slate-200 my-2"></div>
           <div><span class="font-medium text-slate-700">Cliente:</span> ${cab.cliente?.nome || '-'}</div>
           <div><span class="font-medium text-slate-700">Doc:</span> ${cab.cliente?.doc || '-'}</div>
@@ -3621,7 +3628,7 @@ const pecasPreDefinidas = [
       y += linhaH;
     }
 
-    twoCols(`O.S Interna: ${cab.osInterna || '-'}`, `Data/Hora Entrada: ${cab.dataHoraEntrada ? new Date(cab.dataHoraEntrada).toLocaleString('pt-BR') : '-'}`);
+    twoCols(`O.S Interna: ${cab.osInterna || '-'}`, `Data/Hora Entrada: ${formatarDataHoraCuiaba(cab.dataHoraEntrada)}`);
     twoCols(`Cliente: ${cab.cliente?.nome || '-'}`, `Doc: ${cab.cliente?.doc || '-'}`);
     twoCols(`Telefone: ${cab.cliente?.tel || '-'}`, `Endereço: ${cab.cliente?.end || '-'}`);
     twoCols(`Veículo: ${cab.veiculo?.nome || '-'}`, `Placa: ${cab.veiculo?.placa || '-'}`);
@@ -3886,7 +3893,10 @@ const pecasPreDefinidas = [
     const data = await resp.json();
     const key = data?.key || data?.fileName;
     if (!key) throw new Error('Servidor não retornou a key do upload');
-    return key;
+    return {
+      key,
+      uploadedAt: data?.uploadedAt || null,
+    };
   }
 
   /** Atualiza o badge de pendentes e mostra/esconde botão de sync. */
@@ -3993,7 +4003,8 @@ const pecasPreDefinidas = [
             for (const foto of payload.fotos360) {
               if (foto.foto && foto.foto.startsWith('data:image')) {
                 const blob = dataURLtoBlob(foto.foto);
-                foto.foto  = await uploadBlobParaServidor(blob, 'checklist');
+                const uploaded = await uploadBlobParaServidor(blob, 'checklist');
+                foto.foto = uploaded.key;
               }
             }
           }
@@ -4003,7 +4014,11 @@ const pecasPreDefinidas = [
             for (const avaria of payload.avarias) {
               if (avaria.fotoBase64 && avaria.fotoBase64.startsWith('data:image')) {
                 const blob         = dataURLtoBlob(avaria.fotoBase64);
-                avaria.fotoBase64  = await uploadBlobParaServidor(blob, 'avarias');
+                const uploaded = await uploadBlobParaServidor(blob, 'avarias');
+                avaria.fotoBase64 = uploaded.key;
+                if (uploaded.uploadedAt) {
+                  avaria.timestamp = uploaded.uploadedAt;
+                }
               }
             }
           }
