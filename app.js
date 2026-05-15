@@ -153,6 +153,18 @@ async function compressDataUrl(dataUrl, maxW = 1280, maxH = 1280, quality = 0.65
   return out;
 }
 
+/**
+ * Converte um dataURL em Blob (usado para re-upload durante sync).
+ */
+function dataURLtoBlob(dataURL) {
+  const [header, b64data] = dataURL.split(',');
+  const mime = header.match(/:(.*?);/)[1];
+  const bstr = atob(b64data);
+  const u8arr = new Uint8Array(bstr.length);
+  for (let i = 0; i < bstr.length; i++) u8arr[i] = bstr.charCodeAt(i);
+  return new Blob([u8arr], { type: mime });
+}
+
 /* ==========================================================
   WIZARD (7 telas)
   ========================================================== */
@@ -941,53 +953,92 @@ async function buscarListaChecklists(pagina, placaBusca) {
 }
 
 // Função para buscar e exibir checklists com paginação e filtro
-async function carregarChecklists({pagina, placa} = {}) { console.log('carregarChecklists', {pagina, placa});
-  const tbody = document.getElementById('checklists-tbody');
+async function carregarChecklists({pagina, placa} = {}) {
+  const tbody         = document.getElementById('checklists-tbody');
   const paginacaoInfo = document.getElementById('paginacao-info');
-  const btnAnterior = document.getElementById('btn-pag-anterior');
-  const btnProxima = document.getElementById('btn-pag-proxima');
-  const filtroInput = document.getElementById('filtro-placa');
+  const btnAnterior   = document.getElementById('btn-pag-anterior');
+  const btnProxima    = document.getElementById('btn-pag-proxima');
+  const filtroInput   = document.getElementById('filtro-placa');
   if (!tbody) return;
+
   tbody.innerHTML = `<tr><td colspan="6" class="text-center text-slate-400 py-6">Carregando...</td></tr>`;
   paginaAtual = pagina || paginaAtual || 1;
-  // Sempre pega o valor atual do input, se existir
   let placaBusca = (typeof placa === 'string') ? placa : (filtroInput ? filtroInput.value.trim().toUpperCase() : '');
   filtroPlaca = placaBusca;
 
+  // ── 1. Pendentes locais (IndexedDB) ──────────────────────────
+  let pendentesList = [];
   try {
-    const json = await buscarListaChecklists(paginaAtual, placaBusca);
-    totalPaginas = json.totalPages || 1;
-    if (!json.data || !Array.isArray(json.data) || json.data.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" class="text-center text-slate-400 py-6">Nenhum checklist encontrado.</td></tr>`;
-    } else {
-      tbody.innerHTML = json.data.map(item => `
-        <tr class="hover:bg-blue-50 transition cursor-pointer" data-item='${JSON.stringify(item).replace(/'/g, "&#39;")}'>
-          <td class="checklists-cell col-os font-mono">${item.osInterna || '-'}</td>
-          <td class="checklists-cell col-cliente" title="${sanitizeHtml(item.clienteNome || '-')}">${item.clienteNome || '-'}</td>
-          <td class="checklists-cell col-veiculo checklists-cell-truncate" title="${sanitizeHtml(item.veiculoNome || '-')}">${item.veiculoNome || '-'}</td>
-          <td class="checklists-cell col-placa">${item.veiculoPlaca || '-'}</td>
-          <td class="checklists-cell col-entrada">${item.dataHoraEntrada ? new Date(item.dataHoraEntrada).toLocaleDateString('pt-BR') : '-'}</td>
-          <td class="checklists-cell col-status">${checklistEntregue(item) ? '<span class="delivery-neon-badge">Veiculo entregue</span>' : ''}</td>
-        </tr>
-      `).join('');
-      // Delega clique nas linhas
-      tbody.querySelectorAll('tr[data-item]').forEach(tr => {
-        tr.addEventListener('click', () => {
-          try { abrirDetalheChecklist(JSON.parse(tr.dataset.item)); } catch(err) { console.error(err); }
-        });
-      });
-    }
-    // Atualiza paginação
-    if (paginacaoInfo) paginacaoInfo.textContent = `Página ${paginaAtual}/${totalPaginas}`;
-    if (btnAnterior) btnAnterior.disabled = paginaAtual <= 1;
-    if (btnProxima) btnProxima.disabled = paginaAtual >= totalPaginas;
+    const todos = await window.OfflineDB?.listarPendentes() || [];
+    pendentesList = todos.filter((r) => {
+      if (!placaBusca) return true;
+      return (r.payload?.veiculoPlaca || '').toUpperCase().includes(placaBusca);
+    });
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-red-400 py-6">Erro ao carregar checklists</td></tr>`;
-    if (paginacaoInfo) paginacaoInfo.textContent = '';
-    if (btnAnterior) btnAnterior.disabled = true;
-    if (btnProxima) btnProxima.disabled = true;
-    console.error(e);
+    console.warn('[OFFLINE] Falha ao ler pendentes locais:', e);
   }
+
+  // ── 2. Dados do servidor ──────────────────────────────────────
+  let serverItems = [];
+  let serverOk    = false;
+  try {
+    const json  = await buscarListaChecklists(paginaAtual, placaBusca);
+    totalPaginas = json.totalPages || 1;
+    serverItems  = json.data || [];
+    serverOk     = true;
+  } catch (e) {
+    console.warn('[OFFLINE] Servidor indisponível:', e);
+    totalPaginas = 1;
+  }
+
+  // ── 3. Renderizar ─────────────────────────────────────────────
+  const pendentesHtml = pendentesList.map((reg) => {
+    const p          = reg.payload || {};
+    const dataEntrada = p.dataHoraEntrada ? new Date(p.dataHoraEntrada).toLocaleDateString('pt-BR') : '-';
+    return `
+      <tr class="bg-amber-50/80 hover:bg-amber-100/80 transition" data-local-pending="${sanitizeHtml(reg.localId)}">
+        <td class="checklists-cell col-os font-mono">${sanitizeHtml(p.osInterna || '-')}</td>
+        <td class="checklists-cell col-cliente" title="${sanitizeHtml(p.clienteNome || '-')}">${sanitizeHtml(p.clienteNome || '-')}</td>
+        <td class="checklists-cell col-veiculo checklists-cell-truncate">${sanitizeHtml(p.veiculoNome || '-')}</td>
+        <td class="checklists-cell col-placa">${sanitizeHtml(p.veiculoPlaca || '-')}</td>
+        <td class="checklists-cell col-entrada">${dataEntrada}</td>
+        <td class="checklists-cell col-status">
+          <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200 cursor-default">⏳ Pendente</span>
+        </td>
+      </tr>`;
+  }).join('');
+
+  const serverHtml = serverItems.map((item) => `
+    <tr class="hover:bg-blue-50 transition cursor-pointer" data-item='${JSON.stringify(item).replace(/'/g, "&#39;")}'>
+      <td class="checklists-cell col-os font-mono">${item.osInterna || '-'}</td>
+      <td class="checklists-cell col-cliente" title="${sanitizeHtml(item.clienteNome || '-')}">${item.clienteNome || '-'}</td>
+      <td class="checklists-cell col-veiculo checklists-cell-truncate" title="${sanitizeHtml(item.veiculoNome || '-')}">${item.veiculoNome || '-'}</td>
+      <td class="checklists-cell col-placa">${item.veiculoPlaca || '-'}</td>
+      <td class="checklists-cell col-entrada">${item.dataHoraEntrada ? new Date(item.dataHoraEntrada).toLocaleDateString('pt-BR') : '-'}</td>
+      <td class="checklists-cell col-status">${checklistEntregue(item) ? '<span class="delivery-neon-badge">Veiculo entregue</span>' : ''}</td>
+    </tr>
+  `).join('');
+
+  if (!pendentesHtml && !serverHtml) {
+    const msg = serverOk
+      ? 'Nenhum checklist encontrado.'
+      : 'Sem conexão com o servidor. Nenhum registro pendente local.';
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-slate-400 py-6">${msg}</td></tr>`;
+  } else {
+    tbody.innerHTML = pendentesHtml + serverHtml;
+    tbody.querySelectorAll('tr[data-item]').forEach((tr) => {
+      tr.addEventListener('click', () => {
+        try { abrirDetalheChecklist(JSON.parse(tr.dataset.item)); } catch (err) { console.error(err); }
+      });
+    });
+  }
+
+  if (paginacaoInfo) paginacaoInfo.textContent = `Página ${paginaAtual}/${totalPaginas}`;
+  if (btnAnterior) btnAnterior.disabled = paginaAtual <= 1;
+  if (btnProxima)  btnProxima.disabled  = paginaAtual >= totalPaginas;
+
+  // Atualizar badge de pendentes
+  window.atualizarContadorPendentes?.();
 }
 
 document.addEventListener('DOMContentLoaded', ()=>{
@@ -1076,6 +1127,29 @@ document.addEventListener('DOMContentLoaded', ()=>{
   if (document.querySelector('[data-tela="0"]')) {
     carregarChecklists({pagina: 1});
   }
+
+  // ── Indicador de rede ────────────────────────────────────────
+  function atualizarStatusRede() {
+    const dot  = document.getElementById('online-status-dot');
+    const text = document.getElementById('online-status-text');
+    const online = navigator.onLine;
+    if (dot)  dot.className    = `h-2 w-2 rounded-full ${online ? 'bg-emerald-500' : 'bg-rose-500'}`;
+    if (text) text.textContent = online ? 'Online' : 'Offline – salvando localmente';
+  }
+  atualizarStatusRede();
+  window.addEventListener('online',  () => { atualizarStatusRede(); window.atualizarContadorPendentes?.(); });
+  window.addEventListener('offline', () => atualizarStatusRede());
+
+  // ── Botão abrir sync ─────────────────────────────────────────
+  document.getElementById('btn-abrir-sync')?.addEventListener('click', () => window.abrirModalSync?.());
+
+  // ── Modal sync ───────────────────────────────────────────────
+  document.getElementById('sync-modal-close')?.addEventListener('click',   () => document.getElementById('sync-modal')?.close());
+  document.getElementById('sync-modal-close-2')?.addEventListener('click', () => document.getElementById('sync-modal')?.close());
+  document.getElementById('btn-sincronizar-tudo')?.addEventListener('click', () => window.sincronizarPendentes?.());
+
+  // Carregar contador de pendentes na inicialização
+  window.atualizarContadorPendentes?.();
 
   document.getElementById('delivery-close')?.addEventListener('click', () => {
     document.getElementById('delivery-modal')?.close();
@@ -1512,16 +1586,20 @@ const pecasPreDefinidas = [
     uploadFoto360EmAndamento = true;
 
     try {
-      travarTela('Enviando foto... Aguarde.');
-      if (fotos360Status) fotos360Status.textContent = `Enviando foto da posicao: ${current.titulo}...`;
-      const key = await uploadFoto360(file);
+      travarTela('Salvando foto...');
+      if (fotos360Status) fotos360Status.textContent = `Salvando foto: ${current.titulo}...`;
+
+      // Offline-first: converte para dataURL e armazena localmente.
+      // O upload real para o servidor acontece apenas durante a sincronização.
+      const dataUrl = await fileToDataURL(file);
+      const dataUrlComprimido = await compressDataUrl(dataUrl, 1280, 1280, 0.80);
 
       if (current.previewUrl) {
         try { URL.revokeObjectURL(current.previewUrl); } catch {}
       }
 
       const eraCapturada = !!current.foto;
-      current.foto = key;
+      current.foto = dataUrlComprimido;            // dataURL local (não key do servidor)
       current.previewUrl = URL.createObjectURL(file);
       current.status = eraCapturada ? 'refeita' : 'capturada';
 
@@ -1530,9 +1608,10 @@ const pecasPreDefinidas = [
       }
       renderizarFotos360Guiadas();
       renderizarRevisaoFotos360();
+      schedulePersistChecklistDraft();
     } catch (err) {
       console.error(err);
-      if (fotos360Status) fotos360Status.textContent = 'Erro ao enviar foto 360. Tente novamente.';
+      if (fotos360Status) fotos360Status.textContent = 'Erro ao salvar foto 360. Tente novamente.';
     } finally {
       uploadFoto360EmAndamento = false;
       destravarTela();
@@ -2601,42 +2680,20 @@ const pecasPreDefinidas = [
       // que trata a compressão e sobe no MinIO, retornando a `key`.
       if (entradaFoto?.files?.[0]) {
         try {
-          travarTela('Enviando foto... Aguarde.');
-          const form = new FormData();
-          if (!entradaFoto.files || entradaFoto.files.length === 0) {
-            console.error('Nenhuma imagem selecionada!');
-            alert('Selecione uma imagem antes de enviar.');
-            return;
-          }
+          travarTela('Salvando foto...');
           const arquivo = entradaFoto.files[0];
           fotoPreviewUrl = URL.createObjectURL(arquivo);
-          console.log('Arquivo selecionado:', arquivo);
-          form.append('file', arquivo);
 
-          for (let pair of form.entries()) {
-            console.log(pair[0]+ ':', pair[1]);
-          }
-
-          const resp = await fetch(`${UPLOADS_BASE_URL}/avarias`, {
-            method: 'POST',
-            body: form,
-          });
-          if (!resp.ok) {
-            const t = await resp.text().catch(()=> '');
-            throw new Error(`HTTP ${resp.status} – ${t || resp.statusText}`);
-          }
-
-          const data = await resp.json();
-          console.log('[UPLOAD /avarias] response:', data);
-          const key = data?.key || data?.fileName || null;
-          console.log('[UPLOAD /avarias] key escolhida:', key);
-          fotoKeyFromUpload = key;
+          // Offline-first: converte para dataURL comprimido e armazena localmente.
+          // O upload real para o servidor acontece apenas durante a sincronização.
+          const dataUrl = await fileToDataURL(arquivo);
+          fotoKeyFromUpload = await compressDataUrl(dataUrl, 1280, 1280, 0.65);
         } catch (err) {
-          console.error('[UPLOAD /avarias] falha no upload:', err);
+          console.error('[AVARIA] falha ao processar foto:', err);
           if (fotoPreviewUrl) {
             try { URL.revokeObjectURL(fotoPreviewUrl); } catch {}
           }
-          alert('Falha ao enviar a foto da avaria. Tente novamente.');
+          alert('Falha ao processar a foto da avaria. Tente novamente.');
           return;
         } finally {
           destravarTela();
@@ -3779,17 +3836,26 @@ const pecasPreDefinidas = [
         return;
       }
 
-      botaoSendApi.textContent = 'Enviando...';
+      botaoSendApi.textContent = 'Salvando...';
       const body = await montarPayloadParaApi();
-      const resp = await postJson(API_URL, body, { timeoutMs: 20000 });
-      console.log('[POST /checklists] resp:', resp);
 
-      if (statusPost) statusPost.textContent = 'Checklist salvo com sucesso!';
+      // Offline-first: salva no IndexedDB (sync com servidor ocorre depois)
+      await window.OfflineDB.salvarChecklistLocal(body);
+      console.log('[OFFLINE] Checklist salvo localmente no IndexedDB');
+
+      if (statusPost) statusPost.textContent = 'Checklist salvo localmente! Sincronize quando houver internet.';
       botaoSendApi.textContent = 'Salvo ✅';
 
-      resetChecklistUI();
+      resetChecklistUI({ goToList: true, silent: true });
 
-      setTimeout(()=> botaoSendApi.textContent = labelOrig, 2000);
+      await window.atualizarContadorPendentes?.();
+
+      // Se estiver online, abre modal de sincronização automática
+      if (navigator.onLine) {
+        setTimeout(() => window.abrirModalSync?.(), 600);
+      }
+
+      setTimeout(() => botaoSendApi.textContent = labelOrig, 2000);
     } catch (e) {
       console.error(e);
       const msg = String(e?.message || e);
@@ -3800,6 +3866,182 @@ const pecasPreDefinidas = [
       botaoSendApi.disabled = false;
     }
   });
+
+  /* ==========================================================
+     OFFLINE-FIRST — Upload helper + Sync
+     ========================================================== */
+
+  /**
+   * Faz upload de um Blob para o endpoint correto e retorna a key do servidor.
+   * Usado exclusivamente durante a sincronização.
+   */
+  async function uploadBlobParaServidor(blob, tipo) {
+    const endpoint = tipo === 'checklist'
+      ? `${UPLOADS_BASE_URL}/checklist`
+      : `${UPLOADS_BASE_URL}/avarias`;
+    const form = new FormData();
+    form.append('file', blob, `foto-${Date.now()}.jpg`);
+    const resp = await fetch(endpoint, { method: 'POST', body: form });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status} no upload (${tipo})`);
+    const data = await resp.json();
+    const key = data?.key || data?.fileName;
+    if (!key) throw new Error('Servidor não retornou a key do upload');
+    return key;
+  }
+
+  /** Atualiza o badge de pendentes e mostra/esconde botão de sync. */
+  async function atualizarContadorPendentes() {
+    try {
+      const pendentes = await window.OfflineDB?.listarPendentes() || [];
+      const count = pendentes.length;
+      const badge = document.getElementById('sync-badge-count');
+      const btn   = document.getElementById('btn-abrir-sync');
+      if (badge) badge.textContent = String(count);
+      if (btn)   btn.classList.toggle('hidden', count === 0);
+    } catch (e) {
+      console.warn('[OFFLINE] atualizarContadorPendentes:', e);
+    }
+  }
+
+  /** Renderiza a lista de pendentes dentro do modal de sync. */
+  async function renderizarModalSync() {
+    const lista    = document.getElementById('sync-lista-pendentes');
+    const statusEl = document.getElementById('sync-status');
+    if (!lista) return;
+
+    try {
+      const pendentes = await window.OfflineDB?.listarPendentes() || [];
+      const btnSync   = document.getElementById('btn-sincronizar-tudo');
+
+      if (!pendentes.length) {
+        lista.innerHTML = '<p class="text-sm text-slate-500 text-center py-4">Nenhum checklist pendente.</p>';
+        if (btnSync) btnSync.disabled = true;
+        if (statusEl) statusEl.textContent = '';
+        return;
+      }
+
+      lista.innerHTML = pendentes.map((reg) => {
+        const p    = reg.payload || {};
+        const data = reg.criadoEm ? new Date(reg.criadoEm).toLocaleString('pt-BR') : '-';
+        return `
+          <div class="flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2 bg-white/70" data-sync-item="${sanitizeHtml(reg.localId)}">
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-slate-800 truncate">OS: ${sanitizeHtml(p.osInterna || '-')} — ${sanitizeHtml(p.veiculoPlaca || '-')}</p>
+              <p class="text-xs text-slate-500 truncate">${sanitizeHtml(p.clienteNome || '-')} &bull; ${data}</p>
+            </div>
+            <span class="sync-item-status shrink-0 text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200">⏳ Pendente</span>
+          </div>`;
+      }).join('');
+
+      if (btnSync) btnSync.disabled = false;
+      if (statusEl) statusEl.textContent = '';
+    } catch (e) {
+      lista.innerHTML = '<p class="text-sm text-rose-500">Erro ao carregar pendentes.</p>';
+    }
+  }
+
+  /** Abre o modal de sincronização. */
+  function abrirModalSync() {
+    const modal = document.getElementById('sync-modal');
+    if (!modal) return;
+    renderizarModalSync();
+    modal.showModal();
+  }
+
+  /**
+   * Sincroniza todos os checklists pendentes:
+   *  1. Faz upload de cada foto (dataURL → key do servidor)
+   *  2. POST do payload para a API
+   *  3. Marca como sincronizado no IndexedDB
+   */
+  async function sincronizarPendentes() {
+    const statusEl = document.getElementById('sync-status');
+    const btnSync  = document.getElementById('btn-sincronizar-tudo');
+
+    if (btnSync) btnSync.disabled = true;
+    if (statusEl) statusEl.textContent = 'Iniciando sincronização…';
+
+    let sincronizados = 0;
+    let erros = 0;
+
+    try {
+      const pendentes = await window.OfflineDB?.listarPendentes() || [];
+
+      if (!pendentes.length) {
+        if (statusEl) statusEl.textContent = 'Nada a sincronizar.';
+        if (btnSync) btnSync.disabled = false;
+        return;
+      }
+
+      for (const reg of pendentes) {
+        const itemEl = document.querySelector(`[data-sync-item="${reg.localId}"] .sync-item-status`);
+        const setStatus = (txt, cls) => {
+          if (!itemEl) return;
+          itemEl.textContent  = txt;
+          itemEl.className    = `sync-item-status shrink-0 text-xs px-2 py-1 rounded-full border ${cls}`;
+        };
+
+        setStatus('⏳ Sincronizando…', 'bg-blue-100 text-blue-700 border-blue-200');
+        if (statusEl) statusEl.textContent = `Sincronizando OS ${reg.payload?.osInterna || reg.localId}…`;
+
+        try {
+          // Clonar payload para não corromper o registro no IndexedDB
+          const payload = JSON.parse(JSON.stringify(reg.payload));
+
+          // 1. Upload das fotos 360 (dataURL → key)
+          if (Array.isArray(payload.fotos360)) {
+            for (const foto of payload.fotos360) {
+              if (foto.foto && foto.foto.startsWith('data:image')) {
+                const blob = dataURLtoBlob(foto.foto);
+                foto.foto  = await uploadBlobParaServidor(blob, 'checklist');
+              }
+            }
+          }
+
+          // 2. Upload das fotos de avaria (dataURL → key)
+          if (Array.isArray(payload.avarias)) {
+            for (const avaria of payload.avarias) {
+              if (avaria.fotoBase64 && avaria.fotoBase64.startsWith('data:image')) {
+                const blob         = dataURLtoBlob(avaria.fotoBase64);
+                avaria.fotoBase64  = await uploadBlobParaServidor(blob, 'avarias');
+              }
+            }
+          }
+
+          // 3. POST para a API
+          await postJson(API_URL, payload, { timeoutMs: 30000 });
+
+          // 4. Marcar como sincronizado
+          await window.OfflineDB.marcarSincronizado(reg.localId);
+          sincronizados++;
+          setStatus('✅ Sincronizado', 'bg-emerald-100 text-emerald-700 border-emerald-200');
+        } catch (err) {
+          console.error('[SYNC] Erro:', reg.localId, err);
+          await window.OfflineDB?.marcarErro(reg.localId, err.message);
+          erros++;
+          setStatus('❌ Erro', 'bg-rose-100 text-rose-700 border-rose-200');
+        }
+      }
+
+      const msg = erros === 0
+        ? `✅ ${sincronizados} checklist(s) sincronizado(s) com sucesso!`
+        : `⚠️ ${sincronizados} sincronizado(s), ${erros} com erro.`;
+      if (statusEl) statusEl.textContent = msg;
+
+      await atualizarContadorPendentes();
+      await carregarChecklists({ pagina: paginaAtual });
+    } catch (err) {
+      console.error('[SYNC] Erro geral:', err);
+      if (statusEl) statusEl.textContent = 'Erro durante sincronização: ' + (err.message || err);
+    } finally {
+      if (btnSync) btnSync.disabled = false;
+    }
+  }
+
+  // Expor ao escopo global para uso no DOMContentLoaded externo
+  window.abrirModalSync          = abrirModalSync;
+  window.sincronizarPendentes    = sincronizarPendentes;
+  window.atualizarContadorPendentes = atualizarContadorPendentes;
 
   // Start
   renderizarFaces3d();
