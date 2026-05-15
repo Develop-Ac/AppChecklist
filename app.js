@@ -2803,14 +2803,14 @@ const pecasPreDefinidas = [
     }
     avarias.forEach((d, i)=>{
       const coords = d.pos3d ? ` (x:${d.pos3d.x.toFixed(2)}, y:${d.pos3d.y.toFixed(2)}, z:${d.pos3d.z.toFixed(2)})` : '';
+      const thumbAvaria = d.fotoPreviewUrl || (String(d.fotoBase64 || '').startsWith('data:image') ? d.fotoBase64 : null);
       const linha = document.createElement('div');
       linha.className = 'bg-white/70 border border-slate-200 rounded-xl px-4 py-3 shadow-sm flex justify-between items-center';
       linha.innerHTML = `
         <div>
           <p class="font-semibold text-slate-800">${i+1}. <span class="font-medium">${d.part || 'Peça'}</span> – ${d.type}${coords}</p>
           <p class="text-sm text-slate-500">${d.notes || 'Sem observações.'}</p>
-          ${d.fotoBase64 ? `<p class="text-xs text-slate-400 break-all">fotoBase64 (key): ${d.fotoBase64}</p>` : ''}
-          ${d.fotoPreviewUrl ? `<img src="${d.fotoPreviewUrl}" alt="Foto da avaria ${i+1}" class="mt-2 rounded-lg border border-slate-200 max-h-32 w-auto">` : ''}
+          ${thumbAvaria ? `<img src="${thumbAvaria}" alt="Foto da avaria ${i+1}" class="mt-2 rounded-lg border border-slate-200 max-h-32 w-auto">` : ''}
         </div>
         <div class="flex items-center gap-3">
           <button class="editar text-blue-600 hover:text-blue-800 text-sm">Editar</button>
@@ -3367,13 +3367,13 @@ const pecasPreDefinidas = [
     const resumoAvarias =
       avs.length
         ? avs.map((d, idx) => {
-            const preview = avsComPreview[idx]?.fotoPreviewUrl || null;
+            const fotoRaw = String(d.fotoBase64 || '');
+            const preview = avsComPreview[idx]?.fotoPreviewUrl || (fotoRaw.startsWith('data:image') ? fotoRaw : null);
             return `
               <div class="border border-slate-200 rounded-lg p-3 bg-white/70">
                 <p class="text-sm font-semibold text-slate-800">${idx+1}. ${d.peca || 'Peça'} – ${d.tipo || '-'}</p>
                 <p class="text-xs text-slate-600">${d.observacoes || 'Sem observações.'}</p>
                 ${preview ? `<img src="${preview}" alt="Foto da avaria ${idx+1}" class="mt-2 rounded-lg border border-slate-200 max-h-36 w-auto">` : ''}
-                ${d.fotoBase64 ? `<p class="text-[10px] text-slate-400 break-all mt-1">key: ${d.fotoBase64}</p>` : ''}
               </div>`;
           }).join('')
         : '<p class="text-sm text-slate-500">Nenhuma avaria registrada.</p>';
@@ -3382,8 +3382,10 @@ const pecasPreDefinidas = [
       ? fotos360Resumo.map((f) => `
           <div class="border border-slate-200 rounded-lg p-3 bg-white/70">
             <p class="text-sm font-semibold text-slate-800">${f.titulo}</p>
-            ${f.previewUrl ? `<img src="${f.previewUrl}" alt="${f.titulo}" class="mt-2 rounded-lg border border-slate-200 max-h-28 w-auto">` : '<p class="text-xs text-slate-400 mt-2">Sem preview na sessão atual.</p>'}
-            ${f.foto ? `<p class="text-[10px] text-slate-400 break-all mt-1">key: ${f.foto}</p>` : '<p class="text-[10px] text-rose-500 mt-1">pendente</p>'}
+            ${(f.previewUrl || (String(f.foto || '').startsWith('data:image') ? f.foto : ''))
+              ? `<img src="${f.previewUrl || f.foto}" alt="${f.titulo}" class="mt-2 rounded-lg border border-slate-200 max-h-28 w-auto">`
+              : '<p class="text-xs text-slate-400 mt-2">Sem imagem disponível.</p>'}
+            ${f.foto ? '' : '<p class="text-[10px] text-rose-500 mt-1">pendente</p>'}
           </div>
         `).join('')
       : '<p class="text-sm text-slate-500">Nenhuma foto 360 registrada.</p>';
