@@ -625,7 +625,7 @@ async function sincronizarPayloadChecklist(payload, { onProgress } = {}) {
     for (const foto of payloadSync.fotos360) {
       if (foto?.foto && foto.foto.startsWith('data:image')) {
         const blob = dataURLtoBlob(foto.foto);
-        const uploaded = await uploadBlobParaServidor(blob, 'checklist');
+        const uploaded = await window.uploadBlobParaServidor(blob, 'checklist');
         foto.foto = uploaded.key;
         avancarProgresso();
       }
@@ -636,7 +636,7 @@ async function sincronizarPayloadChecklist(payload, { onProgress } = {}) {
     for (const avaria of payloadSync.avarias) {
       if (avaria?.fotoBase64 && avaria.fotoBase64.startsWith('data:image')) {
         const blob = dataURLtoBlob(avaria.fotoBase64);
-        const uploaded = await uploadBlobParaServidor(blob, 'avarias');
+        const uploaded = await window.uploadBlobParaServidor(blob, 'avarias');
         avaria.fotoBase64 = uploaded.key;
         if (uploaded.uploadedAt) {
           avaria.timestamp = uploaded.uploadedAt;
@@ -646,7 +646,7 @@ async function sincronizarPayloadChecklist(payload, { onProgress } = {}) {
     }
   }
 
-  await postJson(API_URL, payloadSync, { timeoutMs: 30000 });
+  await window.postJson(API_URL, payloadSync, { timeoutMs: 30000 });
   return payloadSync;
 }
 
@@ -4383,6 +4383,8 @@ const pecasPreDefinidas = [
   window.travarTela                 = travarTela;
   window.destravarTela              = destravarTela;
   window.montarPayloadParaApi       = montarPayloadParaApi;
+  window.uploadBlobParaServidor     = uploadBlobParaServidor;
+  window.postJson                   = postJson;
 
   // Start
   renderizarFaces3d();
