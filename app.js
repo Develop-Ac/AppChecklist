@@ -597,91 +597,102 @@ function atualizarProgressoUI(atual, total, percentual) {
   }
 }
 
+function contarUploadsDoPayload(payload) {
+  let total = 0;
+
+  if (Array.isArray(payload?.fotos360)) {
+    total += payload.fotos360.filter((foto) => foto?.foto && foto.foto.startsWith('data:image')).length;
+  }
+
+  if (Array.isArray(payload?.avarias)) {
+    total += payload.avarias.filter((avaria) => avaria?.fotoBase64 && avaria.fotoBase64.startsWith('data:image')).length;
+  }
+
+  return total;
+}
+
+async function sincronizarPayloadChecklist(payload, { onProgress } = {}) {
+  const payloadSync = JSON.parse(JSON.stringify(payload || {}));
+  const total = contarUploadsDoPayload(payloadSync);
+  let atual = 0;
+
+  const avancarProgresso = () => {
+    atual += 1;
+    onProgress?.(atual, total, total > 0 ? Math.round((atual / total) * 100) : 100);
+  };
+
+  if (Array.isArray(payloadSync.fotos360)) {
+    for (const foto of payloadSync.fotos360) {
+      if (foto?.foto && foto.foto.startsWith('data:image')) {
+        const blob = dataURLtoBlob(foto.foto);
+        const uploaded = await uploadBlobParaServidor(blob, 'checklist');
+        foto.foto = uploaded.key;
+        avancarProgresso();
+      }
+    }
+  }
+
+  if (Array.isArray(payloadSync.avarias)) {
+    for (const avaria of payloadSync.avarias) {
+      if (avaria?.fotoBase64 && avaria.fotoBase64.startsWith('data:image')) {
+        const blob = dataURLtoBlob(avaria.fotoBase64);
+        const uploaded = await uploadBlobParaServidor(blob, 'avarias');
+        avaria.fotoBase64 = uploaded.key;
+        if (uploaded.uploadedAt) {
+          avaria.timestamp = uploaded.uploadedAt;
+        }
+        avancarProgresso();
+      }
+    }
+  }
+
+  await postJson(API_URL, payloadSync, { timeoutMs: 30000 });
+  return payloadSync;
+}
+
 async function finalizarChecklist() {
   try {
-    // 1. Montar payload com todas as fotos em dataURL
-    travarTela('Salvando checklist... Aguarde.');
+    travarTela('Preparando checklist... Aguarde.');
     const payload = await montarPayloadParaApi();
+    const localId = await window.OfflineDB?.salvarChecklistLocal(payload);
+    await atualizarContadorPendentes();
 
-    // 2. Check se está online
     if (!navigator.onLine) {
-      // Offline: salvar direto em IndexedDB (fluxo existente)
-      console.log('[FINALIZAR] Offline detectado, salvando em IndexedDB...');
-      await window.OfflineDB?.salvarChecklistLocal(payload);
       resetChecklistUI({ goToList: true, silent: true });
       irParaTela(0);
       if (statusPost) statusPost.textContent = 'Checklist salvo localmente. Sincronize quando conectar.';
       return;
     }
 
-    // 3. Online: Fazer upload de todas as fotos em lote
-    console.log('[FINALIZAR] Online detectado, iniciando upload em lote...');
-    const fotos = await coletarFotosParaUpload(payload);
-
-    if (fotos.length > 0) {
-      // 3a. Mostrar UI de progresso
+    const totalUploads = contarUploadsDoPayload(payload);
+    if (totalUploads > 0) {
       mostrarProgressoUpload();
-
-      // 3b. Executar upload em paralelo
-      const queue = new FotoUploadQueue({ maxParallel: 3, timeoutMs: 30000 });
-      queue.onProgress((atual, total, pct) => {
-        atualizarProgressoUI(atual, total, pct);
-      });
-
-      fotos.forEach(f => queue.adicionar(f));
-      const resultados = await queue.executarParalelo();
-
-      // 3c. Verificar falhas
-      const falhados = resultados.filter(r => r === null);
-      console.log(`[FINALIZAR] Upload concluído: ${resultados.length - falhados.length} sucesso, ${falhados.length} falhas`);
-
-      // 3d. Se houver falhas, salvar em IndexedDB e mostrar fallback
-      if (falhados.length > 0) {
-        console.warn('[FINALIZAR] Fotos falharam no upload, salvando em IndexedDB...');
-        ocultarProgressoUpload();
-        await window.OfflineDB?.salvarChecklistLocal(payload);
-        destravarTela();
-        alert('⚠️ Algumas fotos falharam no upload. Seu checklist foi salvo localmente. Use "Sincronizar" na listagem para tentar novamente.');
-        if (statusPost) statusPost.textContent = 'Fotos salvas localmente. Use "Sincronizar" para enviar.';
-        // Voltar à listagem mesmo com falha parcial
-        resetChecklistUI({ goToList: true, silent: true });
-        irParaTela(0);
-        return;
-      }
-
-      // 3e. Sucesso: Substituir dataURLs pelas keys no payload
-      atualizarPayloadComKeys(payload, fotos, resultados);
-      ocultarProgressoUpload();
+      atualizarProgressoUI(0, totalUploads, 0);
     }
 
-    // 4. POST do payload para API (agora com fotos como keys, não dataURL)
-    console.log('[FINALIZAR] Enviando checklist com keys de fotos...');
-    travarTela('Finalizando checklist... Aguarde.');
-    const resp = await postJson(API_URL, payload, { timeoutMs: 20000 });
+    await sincronizarPayloadChecklist(payload, {
+      onProgress: (atual, total, percentual) => {
+        atualizarProgressoUI(atual, total, percentual);
+      },
+    });
 
-    if (!resp) throw new Error('Erro ao salvar o checklist.');
+    if (localId) {
+      await window.OfflineDB?.marcarSincronizado(localId);
+    }
+    await atualizarContadorPendentes();
+    await carregarChecklists({ pagina: 1 });
 
-    // 5. Sucesso: resetar e voltar para listagem
     resetChecklistUI({ goToList: true, silent: true });
     irParaTela(0);
-
     if (statusPost) statusPost.textContent = 'Checklist salvo com sucesso!';
   } catch (err) {
     console.error('[FINALIZAR CHECKLIST]', err);
     const msg = String(err?.message || err);
-
-    // Se erro durante upload/POST: tentar salvar em IndexedDB como fallback
-    try {
-      const payload = await montarPayloadParaApi();
-      await window.OfflineDB?.salvarChecklistLocal(payload);
-      console.log('[FINALIZAR] Fallback: checklist salvo em IndexedDB após erro');
-    } catch (dbErr) {
-      console.error('[FINALIZAR] Erro ao fazer fallback em IndexedDB:', dbErr);
-    }
-
+    await atualizarContadorPendentes();
     if (statusPost) statusPost.textContent = msg;
     alert(`Erro ao salvar checklist: ${msg}\n\nSeu checklist foi salvo localmente. Use "Sincronizar" na listagem.`);
-    // Manter na tela 4 (não redireciona)
+    resetChecklistUI({ goToList: true, silent: true });
+    irParaTela(0);
   } finally {
     ocultarProgressoUpload();
     destravarTela();
@@ -4353,38 +4364,8 @@ const pecasPreDefinidas = [
         if (statusEl) statusEl.textContent = `Sincronizando OS ${reg.payload?.osInterna || reg.localId}…`;
 
         try {
-          // Clonar payload para não corromper o registro no IndexedDB
-          const payload = JSON.parse(JSON.stringify(reg.payload));
+          await sincronizarPayloadChecklist(reg.payload);
 
-          // 1. Upload das fotos 360 (dataURL → key)
-          if (Array.isArray(payload.fotos360)) {
-            for (const foto of payload.fotos360) {
-              if (foto.foto && foto.foto.startsWith('data:image')) {
-                const blob = dataURLtoBlob(foto.foto);
-                const uploaded = await uploadBlobParaServidor(blob, 'checklist');
-                foto.foto = uploaded.key;
-              }
-            }
-          }
-
-          // 2. Upload das fotos de avaria (dataURL → key)
-          if (Array.isArray(payload.avarias)) {
-            for (const avaria of payload.avarias) {
-              if (avaria.fotoBase64 && avaria.fotoBase64.startsWith('data:image')) {
-                const blob         = dataURLtoBlob(avaria.fotoBase64);
-                const uploaded = await uploadBlobParaServidor(blob, 'avarias');
-                avaria.fotoBase64 = uploaded.key;
-                if (uploaded.uploadedAt) {
-                  avaria.timestamp = uploaded.uploadedAt;
-                }
-              }
-            }
-          }
-
-          // 3. POST para a API
-          await postJson(API_URL, payload, { timeoutMs: 30000 });
-
-          // 4. Marcar como sincronizado
           await window.OfflineDB.marcarSincronizado(reg.localId);
           sincronizados++;
           setStatus('✅ Sincronizado', 'bg-emerald-100 text-emerald-700 border-emerald-200');
