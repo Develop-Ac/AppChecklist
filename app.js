@@ -651,9 +651,10 @@ async function sincronizarPayloadChecklist(payload, { onProgress } = {}) {
 }
 
 async function finalizarChecklist() {
+  const statusPost = document.getElementById('post-status');
   try {
-    travarTela('Preparando checklist... Aguarde.');
-    const payload = await montarPayloadParaApi();
+    window.travarTela?.('Preparando checklist... Aguarde.');
+    const payload = await window.montarPayloadParaApi();
     const localId = await window.OfflineDB?.salvarChecklistLocal(payload);
     await atualizarContadorPendentes();
 
@@ -695,7 +696,7 @@ async function finalizarChecklist() {
     irParaTela(0);
   } finally {
     ocultarProgressoUpload();
-    destravarTela();
+    window.destravarTela?.();
   }
 }
 
@@ -4376,9 +4377,12 @@ const pecasPreDefinidas = [
   }
 
   // Expor ao escopo global para uso no DOMContentLoaded externo
-  window.abrirModalSync          = abrirModalSync;
-  window.sincronizarPendentes    = sincronizarPendentes;
+  window.abrirModalSync             = abrirModalSync;
+  window.sincronizarPendentes       = sincronizarPendentes;
   window.atualizarContadorPendentes = atualizarContadorPendentes;
+  window.travarTela                 = travarTela;
+  window.destravarTela              = destravarTela;
+  window.montarPayloadParaApi       = montarPayloadParaApi;
 
   // Start
   renderizarFaces3d();
