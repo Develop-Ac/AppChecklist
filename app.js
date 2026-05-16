@@ -4179,9 +4179,9 @@ const pecasPreDefinidas = [
      POST para a API
      ========================================================== */
   botaoSendApi?.addEventListener('click', async ()=>{
+    const labelOrig = botaoSendApi.textContent;
     try {
       botaoSendApi.disabled = true;
-      const labelOrig = botaoSendApi.textContent;
       botaoSendApi.textContent = 'Validando...';
       if (statusPost) statusPost.textContent = '';
 
@@ -4212,32 +4212,15 @@ const pecasPreDefinidas = [
         return;
       }
 
-      botaoSendApi.textContent = 'Salvando...';
-      const body = await montarPayloadParaApi();
-
-      // Offline-first: salva no IndexedDB (sync com servidor ocorre depois)
-      await window.OfflineDB.salvarChecklistLocal(body);
-      console.log('[OFFLINE] Checklist salvo localmente no IndexedDB');
-
-      if (statusPost) statusPost.textContent = 'Checklist salvo localmente! Sincronize quando houver internet.';
-      botaoSendApi.textContent = 'Salvo ✅';
-
-      resetChecklistUI({ goToList: true, silent: true });
-
-      await window.atualizarContadorPendentes?.();
-
-      // Se estiver online, abre modal de sincronização automática
-      if (navigator.onLine) {
-        setTimeout(() => window.abrirModalSync?.(), 600);
-      }
-
-      setTimeout(() => botaoSendApi.textContent = labelOrig, 2000);
+      botaoSendApi.textContent = 'Concluindo...';
+      await finalizarChecklist();
+      botaoSendApi.textContent = labelOrig;
     } catch (e) {
       console.error(e);
       const msg = String(e?.message || e);
       if (statusPost) statusPost.textContent = msg;
       alert(msg);
-      botaoSendApi.textContent = 'Salvar no Sistema';
+      botaoSendApi.textContent = labelOrig;
     } finally {
       botaoSendApi.disabled = false;
     }
