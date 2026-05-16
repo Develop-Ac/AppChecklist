@@ -4318,11 +4318,28 @@ const pecasPreDefinidas = [
    *  3. Marca como sincronizado no IndexedDB
    */
   async function sincronizarPendentes() {
-    const statusEl = document.getElementById('sync-status');
-    const btnSync  = document.getElementById('btn-sincronizar-tudo');
+    const statusEl     = document.getElementById('sync-status');
+    const btnSync      = document.getElementById('btn-sincronizar-tudo');
+    const btnFechar    = document.getElementById('sync-modal-close-2');
+    const progressCont = document.getElementById('sync-progress-container');
+    const progressBar  = document.getElementById('sync-progress-bar');
+    const progressPct  = document.getElementById('sync-progress-percent');
+    const progressLbl  = document.getElementById('sync-progress-label');
 
-    if (btnSync) btnSync.disabled = true;
-    if (statusEl) statusEl.textContent = 'Iniciando sincronização…';
+    const setProgress = (atual, total) => {
+      const pct = total > 0 ? Math.round((atual / total) * 100) : 100;
+      if (progressBar)  progressBar.style.width = `${pct}%`;
+      if (progressPct)  progressPct.textContent  = `${pct}%`;
+    };
+
+    if (btnSync)   btnSync.disabled  = true;
+    if (btnFechar) btnFechar.disabled = true;
+    if (statusEl)  statusEl.textContent = '';
+    if (progressCont) progressCont.classList.remove('hidden');
+    if (progressBar)  progressBar.style.width = '0%';
+    if (progressBar)  progressBar.classList.replace('bg-indigo-500', 'bg-indigo-500');
+    if (progressPct)  progressPct.textContent  = '0%';
+    if (progressLbl)  progressLbl.textContent  = 'Iniciando sincronização…';
 
     let sincronizados = 0;
     let erros = 0;
@@ -4332,24 +4349,28 @@ const pecasPreDefinidas = [
 
       if (!pendentes.length) {
         if (statusEl) statusEl.textContent = 'Nada a sincronizar.';
-        if (btnSync) btnSync.disabled = false;
+        if (progressCont) progressCont.classList.add('hidden');
+        if (btnSync)   btnSync.disabled  = false;
+        if (btnFechar) btnFechar.disabled = false;
         return;
       }
 
-      for (const reg of pendentes) {
+      const total = pendentes.length;
+
+      for (const [idx, reg] of pendentes.entries()) {
         const itemEl = document.querySelector(`[data-sync-item="${reg.localId}"] .sync-item-status`);
         const setStatus = (txt, cls) => {
           if (!itemEl) return;
-          itemEl.textContent  = txt;
-          itemEl.className    = `sync-item-status shrink-0 text-xs px-2 py-1 rounded-full border ${cls}`;
+          itemEl.textContent = txt;
+          itemEl.className   = `sync-item-status shrink-0 text-xs px-2 py-1 rounded-full border ${cls}`;
         };
 
         setStatus('⏳ Sincronizando…', 'bg-blue-100 text-blue-700 border-blue-200');
-        if (statusEl) statusEl.textContent = `Sincronizando OS ${reg.payload?.osInterna || reg.localId}…`;
+        if (progressLbl) progressLbl.textContent = `Enviando ${idx + 1} de ${total}…`;
+        setProgress(idx, total);
 
         try {
           await sincronizarPayloadChecklist(reg.payload);
-
           await window.OfflineDB.marcarSincronizado(reg.localId);
           sincronizados++;
           setStatus('✅ Sincronizado', 'bg-emerald-100 text-emerald-700 border-emerald-200');
@@ -4361,16 +4382,46 @@ const pecasPreDefinidas = [
         }
       }
 
-      const msg = erros === 0
-        ? `✅ ${sincronizados} checklist(s) sincronizado(s) com sucesso!`
-        : `⚠️ ${sincronizados} sincronizado(s), ${erros} com erro.`;
-      if (statusEl) statusEl.textContent = msg;
+      setProgress(total, total);
+      if (progressLbl) progressLbl.textContent = 'Concluído';
 
       await atualizarContadorPendentes();
       await carregarChecklists({ pagina: paginaAtual });
+
+      if (erros === 0) {
+        if (progressBar) {
+          progressBar.classList.remove('bg-indigo-500');
+          progressBar.classList.add('bg-emerald-500');
+        }
+        if (statusEl) statusEl.textContent = `✅ ${sincronizados} checklist(s) sincronizado(s) com sucesso!`;
+        setTimeout(() => {
+          const modal = document.getElementById('sync-modal');
+          if (modal?.open) modal.close();
+          if (progressCont) progressCont.classList.add('hidden');
+          if (progressBar) {
+            progressBar.classList.remove('bg-emerald-500');
+            progressBar.classList.add('bg-indigo-500');
+            progressBar.style.width = '0%';
+          }
+          if (statusEl) statusEl.textContent = '';
+        }, 2000);
+      } else {
+        if (progressBar) {
+          progressBar.classList.remove('bg-indigo-500');
+          progressBar.classList.add('bg-amber-500');
+        }
+        if (statusEl) statusEl.textContent = `⚠️ ${sincronizados} sincronizado(s), ${erros} com erro. Verifique os itens marcados.`;
+        if (btnFechar) btnFechar.disabled = false;
+      }
     } catch (err) {
       console.error('[SYNC] Erro geral:', err);
+      if (progressBar) {
+        progressBar.classList.remove('bg-indigo-500');
+        progressBar.classList.add('bg-rose-500');
+      }
+      if (progressLbl) progressLbl.textContent = 'Erro';
       if (statusEl) statusEl.textContent = 'Erro durante sincronização: ' + (err.message || err);
+      if (btnFechar) btnFechar.disabled = false;
     } finally {
       if (btnSync) btnSync.disabled = false;
     }

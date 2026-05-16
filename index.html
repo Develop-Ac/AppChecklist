@@ -661,6 +661,20 @@
 
       <div id="sync-lista-pendentes" class="space-y-2 max-h-64 overflow-y-auto pr-1"></div>
 
+      <!-- Barra de progresso da sincronização -->
+      <div id="sync-progress-container" class="hidden space-y-1">
+        <div class="flex items-center justify-between text-xs text-slate-500">
+          <span id="sync-progress-label">Sincronizando…</span>
+          <span id="sync-progress-percent">0%</span>
+        </div>
+        <div class="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+          <div id="sync-progress-bar"
+            class="h-2.5 rounded-full bg-indigo-500 transition-all duration-400 ease-out"
+            style="width: 0%">
+          </div>
+        </div>
+      </div>
+
       <p id="sync-status" class="text-sm font-medium text-slate-600 min-h-[1.25rem]"></p>
     </div>
 
