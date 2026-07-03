@@ -48,8 +48,33 @@
     const localId  = gerarLocalId();
     const registro = {
       localId,
+      tipo:     'checklist',
       status:   'pendente',
       payload:  JSON.parse(JSON.stringify(payload)), // clone profundo
+      criadoEm: Date.now(),
+    };
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      const req = tx.objectStore(STORE).put(registro);
+      req.onsuccess   = () => resolve(localId);
+      tx.onerror      = (e) => reject(e.target.error);
+    });
+  }
+
+  /**
+   * Salva na MESMA fila de pendentes uma foto avulsa adicionada depois que o
+   * checklist já foi concluído (fotos do serviço / seguro). Fica com
+   * tipo='foto-extra' para a sincronização saber como reenviá-la.
+   * payload esperado: { checklistId, foto: dataURL, osInterna?, veiculoPlaca?, clienteNome? }
+   */
+  async function salvarFotoExtraLocal(payload) {
+    const db = await abrirDB();
+    const localId  = gerarLocalId();
+    const registro = {
+      localId,
+      tipo:     'foto-extra',
+      status:   'pendente',
+      payload:  JSON.parse(JSON.stringify(payload)),
       criadoEm: Date.now(),
     };
     return new Promise((resolve, reject) => {
@@ -115,6 +140,7 @@
   /* ---------- API pública ---------- */
   window.OfflineDB = {
     salvarChecklistLocal,
+    salvarFotoExtraLocal,
     listarPendentes,
     listarTodos,
     marcarSincronizado : (id) =>

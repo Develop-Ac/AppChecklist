@@ -650,6 +650,32 @@ async function sincronizarPayloadChecklist(payload, { onProgress } = {}) {
   return payloadSync;
 }
 
+/**
+ * Sincroniza uma foto avulsa (adicionada após o checklist concluído) que ficou
+ * pendente na fila offline. Faz upload do dataURL → key e associa ao checklist,
+ * exatamente como o envio online de `enviarFotoChecklist`.
+ */
+async function sincronizarFotoExtra(payload) {
+  const checklistId = payload?.checklistId;
+  if (!checklistId) throw new Error('Foto extra sem checklistId.');
+
+  const dataUrl = payload?.foto;
+  if (!dataUrl || !dataUrl.startsWith('data:image')) {
+    throw new Error('Foto extra inválida (sem dataURL).');
+  }
+
+  const blob = dataURLtoBlob(dataUrl);
+  const uploaded = await window.uploadBlobParaServidor(blob, 'checklist');
+  const fileName = uploaded?.key;
+  if (!fileName) throw new Error('Servidor não retornou a key do upload.');
+
+  await window.postJson(
+    `${API_URL}/${encodeURIComponent(checklistId)}/fotos`,
+    { foto: fileName },
+    { timeoutMs: 30000 }
+  );
+}
+
 async function finalizarChecklist() {
   const statusPost = document.getElementById('post-status');
   try {
@@ -1602,6 +1628,10 @@ async function abrirDetalheChecklist(item) {
 
   // Guarda o id do checklist no modal para uso no upload
   modal.dataset.checklistId = item.id;
+  // Metadados para exibir/identificar a foto caso ela caia na fila offline
+  modal.dataset.osInterna    = item.osInterna    || '';
+  modal.dataset.veiculoPlaca = item.veiculoPlaca || '';
+  modal.dataset.clienteNome  = item.clienteNome  || '';
 
   // Limpa estado anterior
   const fotoInput  = document.getElementById('detail-foto-input');
@@ -1649,41 +1679,70 @@ async function enviarFotoChecklist() {
   if (!checklistId) { fotoStatus.textContent = 'ID do checklist não encontrado.'; return; }
   if (!fotoInput?.files?.length) { fotoStatus.textContent = 'Selecione uma foto primeiro.'; return; }
 
+  const arquivo = fotoInput.files[0];
   btnEnviar.disabled = true;
+
+  const limparPreview = () => {
+    fotoInput.value = '';
+    const fotoPreview = document.getElementById('detail-foto-preview');
+    if (fotoPreview) { fotoPreview.src = ''; fotoPreview.classList.add('hidden'); }
+  };
+
+  // Fallback offline-first: guarda a foto na MESMA fila de pendentes usada pelos
+  // checklists, para reenviar depois pelo botão "Sincronizar".
+  const salvarLocalmente = async () => {
+    try {
+      const dataUrl = await compressDataUrl(await fileToDataURL(arquivo), 1280, 1280, 0.80);
+      await window.OfflineDB?.salvarFotoExtraLocal({
+        checklistId,
+        foto:         dataUrl,
+        osInterna:    modal?.dataset?.osInterna    || '',
+        veiculoPlaca: modal?.dataset?.veiculoPlaca || '',
+        clienteNome:  modal?.dataset?.clienteNome  || '',
+      });
+      await window.atualizarContadorPendentes?.();
+      fotoStatus.textContent = 'Sem conexão — foto salva localmente. Use "Sincronizar" na listagem para enviar depois.';
+      fotoStatus.className = 'text-sm text-amber-600 mt-2 font-semibold';
+      limparPreview();
+      return true;
+    } catch (e) {
+      console.error('[FOTO EXTRA] Falha ao salvar localmente:', e);
+      fotoStatus.textContent = 'Erro ao salvar foto localmente: ' + (e?.message || e);
+      fotoStatus.className = 'text-sm text-red-500 mt-2';
+      return false;
+    }
+  };
+
+  // Offline conhecido: nem tenta o servidor, vai direto para a fila.
+  if (!navigator.onLine) {
+    await salvarLocalmente();
+    btnEnviar.disabled = false;
+    return;
+  }
+
   fotoStatus.textContent = 'Enviando...';
   fotoStatus.className = 'text-sm text-slate-500 mt-2';
 
   try {
     // 1. Faz upload do arquivo
-    const formData = new FormData();
-    formData.append('file', fotoInput.files[0], fotoInput.files[0].name);
-    const uploadResp = await fetch(`${UPLOADS_BASE_URL}/checklist`, {
-      method: 'POST',
-      body: formData,
-    });
-    if (!uploadResp.ok) throw new Error(`Falha ao fazer upload da foto (${uploadResp.status})`);
-    const uploadJson = await uploadResp.json();
-    const fileName = uploadJson.fileName || uploadJson.key;
+    const uploaded = await window.uploadBlobParaServidor(arquivo, 'checklist');
+    const fileName = uploaded?.key;
     if (!fileName) throw new Error('Nome do arquivo não retornado');
 
     // 2. Associa a foto ao checklist
-    // Usa o número da OS em vez do checklistId para associar a foto, pois o serviço de fotos espera isso
-    const fotoResp = await fetch(`${API_URL}/${checklistId}/fotos`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ foto: fileName }),
-    });
-    if (!fotoResp.ok) throw new Error('Falha ao associar foto ao checklist');
+    await window.postJson(
+      `${API_URL}/${encodeURIComponent(checklistId)}/fotos`,
+      { foto: fileName },
+      { timeoutMs: 30000 }
+    );
 
     fotoStatus.textContent = 'Foto enviada com sucesso!';
     fotoStatus.className = 'text-sm text-emerald-600 mt-2 font-semibold';
-    fotoInput.value = '';
-    const fotoPreview = document.getElementById('detail-foto-preview');
-    if (fotoPreview) { fotoPreview.src = ''; fotoPreview.classList.add('hidden'); }
+    limparPreview();
   } catch (e) {
-    fotoStatus.textContent = 'Erro: ' + e.message;
-    fotoStatus.className = 'text-sm text-red-500 mt-2';
-    console.error(e);
+    // Problema de conexão/servidor: não bloqueia — cai na fila de sincronização.
+    console.warn('[FOTO EXTRA] Falha no envio online, salvando localmente:', e);
+    await salvarLocalmente();
   } finally {
     btnEnviar.disabled = false;
   }
@@ -4286,10 +4345,14 @@ const pecasPreDefinidas = [
       lista.innerHTML = pendentes.map((reg) => {
         const p    = reg.payload || {};
         const data = reg.criadoEm ? new Date(reg.criadoEm).toLocaleString('pt-BR') : '-';
+        const isFotoExtra = (reg.tipo || 'checklist') === 'foto-extra';
+        const titulo = isFotoExtra
+          ? `📷 Foto extra — OS: ${sanitizeHtml(p.osInterna || '-')} — ${sanitizeHtml(p.veiculoPlaca || '-')}`
+          : `OS: ${sanitizeHtml(p.osInterna || '-')} — ${sanitizeHtml(p.veiculoPlaca || '-')}`;
         return `
           <div class="flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2 bg-white/70" data-sync-item="${sanitizeHtml(reg.localId)}">
             <div class="min-w-0">
-              <p class="text-sm font-semibold text-slate-800 truncate">OS: ${sanitizeHtml(p.osInterna || '-')} — ${sanitizeHtml(p.veiculoPlaca || '-')}</p>
+              <p class="text-sm font-semibold text-slate-800 truncate">${titulo}</p>
               <p class="text-xs text-slate-500 truncate">${sanitizeHtml(p.clienteNome || '-')} &bull; ${data}</p>
             </div>
             <span class="sync-item-status shrink-0 text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200">⏳ Pendente</span>
@@ -4370,7 +4433,11 @@ const pecasPreDefinidas = [
         setProgress(idx, total);
 
         try {
-          await sincronizarPayloadChecklist(reg.payload);
+          if ((reg.tipo || 'checklist') === 'foto-extra') {
+            await sincronizarFotoExtra(reg.payload);
+          } else {
+            await sincronizarPayloadChecklist(reg.payload);
+          }
           await window.OfflineDB.marcarSincronizado(reg.localId);
           sincronizados++;
           setStatus('✅ Sincronizado', 'bg-emerald-100 text-emerald-700 border-emerald-200');
