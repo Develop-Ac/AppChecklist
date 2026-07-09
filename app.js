@@ -681,7 +681,7 @@ async function finalizarChecklist() {
   try {
     window.travarTela?.('Preparando checklist... Aguarde.');
     const payload = await window.montarPayloadParaApi();
-    const localId = await window.OfflineDB?.salvarChecklistLocal(payload);
+    const localId = await window.OfflineDB?.salvarChecklistLocal(payload, payload.clientId);
     await atualizarContadorPendentes();
 
     if (!navigator.onLine) {
@@ -1438,14 +1438,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // Botão Novo (tela inicial)
   const btnNovo = document.getElementById('btn-novo-checklist');
   if (btnNovo) {
-    btnNovo.addEventListener('click', () => {
+    btnNovo.addEventListener('click', async () => {
       console.log('[DRAFT] Clique em "Novo Checklist"')
-      window.clearChecklistDraft?.();
+      await window.clearChecklistDraft?.();
+      window.iniciarNovoChecklistId?.();   // novo localId estável para este checklist
       window.resetChecklistUI?.({ silent: true, goToList: false });
       telaAtual = 1;
-      console.log('[DRAFT] telaAtual definido para', telaAtual);
       atualizarWizardUI();
-      console.log('[DRAFT] Salvando novo rascunho...');
       window.persistChecklistDraft?.();
     });
   }
@@ -1533,6 +1532,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
   window.addEventListener('online',  () => {
     atualizarStatusRede();
     window.atualizarContadorPendentes?.();
+    // Reconectou: sincroniza os pendentes automaticamente (comportamento esperado).
+    window.sincronizarPendentesAuto?.();
     if (telaAtual === 0) {
       aquecerCacheModelo3dListagem().catch((err) => {
         console.warn('[CACHE 3D] Falha ao aquecer cache apos reconexao:', err);
@@ -1598,15 +1599,25 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   });
 
-  console.log('[DRAFT] DOMContentLoaded: Tentando restaurar rascunho...');
-  const restored = window.restoreChecklistDraft?.() === true;
-  console.log('[DRAFT] DOMContentLoaded: Restauração resultado =', restored);
-  if (!restored) {
-    console.log('[DRAFT] DOMContentLoaded: Nenhum rascunho restaurado, atualizando UI');
-    atualizarWizardUI();
-  } else {
-    console.log('[DRAFT] DOMContentLoaded: Rascunho restaurado com sucesso!');
-  }
+  (async () => {
+    console.log('[DRAFT] DOMContentLoaded: Tentando restaurar rascunho...');
+    let restored = false;
+    try {
+      restored = (await window.restoreChecklistDraft?.()) === true;
+    } catch (err) {
+      console.warn('[DRAFT] Falha ao restaurar rascunho:', err);
+    }
+    if (!restored) atualizarWizardUI();
+
+    // Limpa sincronizados antigos (>24h) para o IndexedDB não inchar.
+    window.OfflineDB?.purgarSincronizados?.(24 * 60 * 60 * 1000).catch(() => {});
+
+    // Sincronização automática ao abrir/atualizar a página, se online e houver
+    // pendentes — comportamento esperado, sem depender do clique no botão.
+    if (navigator.onLine) {
+      window.sincronizarPendentesAuto?.();
+    }
+  })();
 });
 
 /* ==========================================================
@@ -2042,7 +2053,7 @@ const pecasPreDefinidas = [
       }
       renderizarFotos360Guiadas();
       renderizarRevisaoFotos360();
-      schedulePersistChecklistDraft();
+      persistChecklistDraft();   // imediato: foto é dado grande e crítico
     } catch (err) {
       console.error(err);
       if (fotos360Status) fotos360Status.textContent = 'Erro ao salvar foto 360. Tente novamente.';
@@ -3156,6 +3167,7 @@ const pecasPreDefinidas = [
 
       console.log('[AVARIA - registro inserido]', registro);
       renderizarListaAvarias();
+      persistChecklistDraft();   // imediato: avaria pode conter foto
     } finally {
       uploadAvariaEmAndamento = false;
     }
@@ -3193,6 +3205,7 @@ const pecasPreDefinidas = [
         }
         avarias.splice(i,1);
         renderizarListaAvarias();
+        persistChecklistDraft();
       };
       listaAvarias.appendChild(linha);
     });
@@ -3259,25 +3272,42 @@ const pecasPreDefinidas = [
     return true;
   }
 
-  function getChecklistDraft() {
+  // localId estável do checklist em preenchimento. Criado ao iniciar um novo
+  // checklist e mantido no rascunho, para ser a chave de idempotência no envio.
+  let checklistLocalId = null;
+
+  function garantirChecklistLocalId() {
+    if (!checklistLocalId) {
+      checklistLocalId = window.OfflineDB?.gerarLocalId?.()
+        || `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+    return checklistLocalId;
+  }
+  window.iniciarNovoChecklistId = () => { checklistLocalId = null; return garantirChecklistLocalId(); };
+
+  async function getChecklistDraft() {
+    try {
+      const dados = await window.OfflineDB?.lerRascunho?.();
+      if (dados && typeof dados === 'object') return dados;
+    } catch (err) {
+      console.warn('[CHECKLIST DRAFT] Falha ao ler rascunho do IndexedDB:', err);
+    }
+    // Migração: rascunho legado que tenha ficado no sessionStorage.
     try {
       const raw = sessionStorage.getItem(CHECKLIST_DRAFT_KEY);
       if (!raw) return null;
       const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object') return null;
-      return parsed;
-    } catch (err) {
-      console.warn('[CHECKLIST DRAFT] Falha ao ler rascunho:', err);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
       return null;
     }
   }
 
-  function clearChecklistDraft() {
-    try {
-      sessionStorage.removeItem(CHECKLIST_DRAFT_KEY);
-    } catch (err) {
-      console.warn('[CHECKLIST DRAFT] Falha ao limpar rascunho:', err);
-    }
+  async function clearChecklistDraft() {
+    checklistLocalId = null;
+    try { await window.OfflineDB?.limparRascunho?.(); }
+    catch (err) { console.warn('[CHECKLIST DRAFT] Falha ao limpar rascunho:', err); }
+    try { sessionStorage.removeItem(CHECKLIST_DRAFT_KEY); } catch {}
   }
 
   function drawSignatureFromBase64(canvasId, dataUrl) {
@@ -3358,6 +3388,7 @@ const pecasPreDefinidas = [
 
     const snapshot = {
       versao: 1,
+      localId: garantirChecklistLocalId(),
       telaAtual,
       campos,
       checklist,
@@ -3375,32 +3406,27 @@ const pecasPreDefinidas = [
     return snapshot;
   }
 
-  function persistChecklistDraft() {
-    console.log('[DRAFT] persistChecklistDraft() chamado');
+  async function persistChecklistDraft() {
     const snapshot = collectDraftSnapshot();
-    if (!snapshot) {
-      console.log('[DRAFT] Nenhum snapshot para salvar');
-      return;
-    }
-
+    if (!snapshot) return;
     try {
-      const json = JSON.stringify(snapshot);
-      console.log('[DRAFT] Tentando salvar em sessionStorage. Tamanho:', json.length, 'bytes');
-      sessionStorage.setItem(CHECKLIST_DRAFT_KEY, json);
-      console.log('[DRAFT] ✓ Rascunho salvo com sucesso em sessionStorage');
+      // IndexedDB comporta as fotos base64 (centenas de MB) — sem o teto de
+      // ~5 MB do sessionStorage nem o QuotaExceededError silencioso.
+      await window.OfflineDB?.salvarRascunho?.(snapshot);
     } catch (err) {
-      console.error('[DRAFT] ✗ ERRO ao salvar rascunho:', err);
+      console.error('[DRAFT] ✗ ERRO ao salvar rascunho no IndexedDB:', err);
     }
   }
 
-  function restoreChecklistDraft() {
-    console.log('[DRAFT] restoreChecklistDraft() chamado');
-    const draft = getChecklistDraft();
-    console.log('[DRAFT] Draft recuperado:', draft);
+  async function restoreChecklistDraft() {
+    const draft = await getChecklistDraft();
     if (!draft || !draft.campos || Number(draft.telaAtual) <= 0) {
       console.log('[DRAFT] Nenhum draft válido para restaurar. Retornando false.');
       return false;
     }
+
+    // Recupera o localId estável para preservar a idempotência do envio.
+    checklistLocalId = draft.localId || null;
 
     Object.entries(draft.campos).forEach(([id, value]) => {
       const el = document.getElementById(id);
@@ -3510,10 +3536,15 @@ const pecasPreDefinidas = [
     schedulePersistChecklistDraft();
   });
 
-  window.addEventListener('beforeunload', () => {
-    if (telaAtual <= 0) return;
-    persistChecklistDraft();
+  // Persiste ao sair. `visibilitychange→hidden` e `pagehide` são os eventos
+  // confiáveis no mobile/PWA (o `beforeunload` frequentemente não dispara no
+  // iOS Safari); mantidos os três por redundância.
+  const persistirAoSair = () => { if (telaAtual > 0) persistChecklistDraft(); };
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') persistirAoSair();
   });
+  window.addEventListener('pagehide', persistirAoSair);
+  window.addEventListener('beforeunload', persistirAoSair);
 
   window.persistChecklistDraft = persistChecklistDraft;
   window.restoreChecklistDraft = restoreChecklistDraft;
@@ -3830,6 +3861,8 @@ const pecasPreDefinidas = [
     }
 
     const bodyApi = {
+      // Chave de idempotência: mesmo checklist reenviado (retry/sync) não duplica.
+      clientId: garantirChecklistLocalId(),
       osInterna: cab.osInterna || null,
       dataHoraEntrada: toIsoZ(cab.dataHoraEntrada) || null,
       observacoes: cab.observacoes || null,
@@ -4380,7 +4413,33 @@ const pecasPreDefinidas = [
    *  2. POST do payload para a API
    *  3. Marca como sincronizado no IndexedDB
    */
-  async function sincronizarPendentes() {
+  // Trava anti-concorrência: impede que o clique manual e o sync automático
+  // (load/online) rodem ao mesmo tempo e tentem enviar o mesmo registro.
+  let sincronizacaoEmAndamento = false;
+
+  /**
+   * Sincronização automática, silenciosa e resiliente: só roda se online e
+   * houver pendentes, respeita a trava e não abre modal. Em caso de erro,
+   * agenda uma única retentativa em 30s. Wired no load e no evento `online`.
+   */
+  async function sincronizarPendentesAuto() {
+    if (sincronizacaoEmAndamento) return;
+    if (!navigator.onLine) return;
+    try {
+      const pendentes = await window.OfflineDB?.listarPendentes() || [];
+      if (!pendentes.length) return;
+    } catch { return; }
+    try {
+      await sincronizarPendentes({ silencioso: true });
+    } catch (err) {
+      console.warn('[SYNC auto] Falha; retentativa em 30s:', err);
+      setTimeout(() => { if (navigator.onLine) sincronizarPendentesAuto(); }, 30000);
+    }
+  }
+
+  async function sincronizarPendentes({ silencioso = false } = {}) {
+    if (sincronizacaoEmAndamento) return;
+    sincronizacaoEmAndamento = true;
     const statusEl     = document.getElementById('sync-status');
     const btnSync      = document.getElementById('btn-sincronizar-tudo');
     const btnFechar    = document.getElementById('sync-modal-close-2');
@@ -4491,12 +4550,14 @@ const pecasPreDefinidas = [
       if (btnFechar) btnFechar.disabled = false;
     } finally {
       if (btnSync) btnSync.disabled = false;
+      sincronizacaoEmAndamento = false;
     }
   }
 
   // Expor ao escopo global para uso no DOMContentLoaded externo
   window.abrirModalSync             = abrirModalSync;
   window.sincronizarPendentes       = sincronizarPendentes;
+  window.sincronizarPendentesAuto   = sincronizarPendentesAuto;
   window.atualizarContadorPendentes = atualizarContadorPendentes;
   window.travarTela                 = travarTela;
   window.destravarTela              = destravarTela;

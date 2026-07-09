@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_VERSION = "model-viewer-cache-v2";
+const CACHE_VERSION = "model-viewer-cache-v4";
 const STATIC_ASSETS = [
   "/",
   "/index.html",
@@ -12,6 +12,24 @@ const STATIC_ASSETS = [
 ];
 
 const MODEL_VIEWER_URL = "https://unpkg.com/@google/model-viewer@3.3.0/dist/model-viewer.min.js";
+
+// Dependências de CDN externas que o app precisa funcionando OFFLINE (tablet
+// instalado). Precarregadas no install e servidas cache-first no fetch. Sem
+// isto, abrir offline quebraria (Tailwind/jsPDF/html2canvas ausentes).
+const EXTERNAL_ASSETS = [
+  MODEL_VIEWER_URL,
+  "https://cdn.tailwindcss.com",
+  "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js",
+  "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
+  "https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js",
+];
+
+// Predicado: esta requisição é uma das CDNs externas que cacheamos offline?
+function ehAssetExternoCacheavel(url) {
+  if (url.host === "cdn.tailwindcss.com") return true; // runtime JIT (path varia)
+  const base = url.origin + url.pathname;
+  return EXTERNAL_ASSETS.some((u) => base === u || url.href === u);
+}
 
 function deveTratarComoAssetLocal(url, request) {
   if (url.origin !== self.location.origin) return false;
@@ -45,10 +63,10 @@ self.addEventListener("install", (event) => {
       await cache.addAll(STATIC_ASSETS);
 
       try {
-        await cachearUrls([MODEL_VIEWER_URL]);
+        await cachearUrls(EXTERNAL_ASSETS);
       } catch (error) {
-        // Sem conectividade no install: o arquivo sera armazenado depois via fetch runtime.
-        console.warn("SW: falha ao pre-cache do model-viewer", error);
+        // Sem conectividade no install: os arquivos serao armazenados depois via fetch runtime.
+        console.warn("SW: falha ao pre-cache das CDNs externas", error);
       }
 
       await self.skipWaiting();
@@ -76,15 +94,12 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
 
-  const isModelViewerScript =
-    url.origin === "https://unpkg.com" &&
-    url.pathname.includes("/@google/model-viewer@") &&
-    url.pathname.endsWith("/dist/model-viewer.min.js");
+  const isExternalCdn = ehAssetExternoCacheavel(url);
 
   const isLocalModelGlb =
     url.origin === self.location.origin && url.pathname.endsWith("/models/carro.glb");
 
-  if (isModelViewerScript || isLocalModelGlb) {
+  if (isExternalCdn || isLocalModelGlb) {
     event.respondWith(
       (async () => {
         const cache = await caches.open(CACHE_VERSION);

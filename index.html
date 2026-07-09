@@ -21,7 +21,13 @@
 
   <!-- Estilos do app -->
   <link rel="stylesheet" href="styles.css" />
+
+  <!-- PWA instalável (tablet Android) -->
   <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="application-name" content="Checklist 3D">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
 </head>
 
 <body class="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
@@ -726,6 +732,56 @@
         }
       });
     }
+  </script>
+
+  <!-- Instalação do PWA no tablet (Android/Chrome) -->
+  <script>
+    (function () {
+      let promptInstalacao = null;
+
+      function criarBotaoInstalar() {
+        if (document.getElementById('btn-instalar-pwa')) return document.getElementById('btn-instalar-pwa');
+        const btn = document.createElement('button');
+        btn.id = 'btn-instalar-pwa';
+        btn.type = 'button';
+        btn.textContent = '⬇️ Instalar app';
+        btn.setAttribute('aria-label', 'Instalar aplicativo no dispositivo');
+        btn.style.cssText = [
+          'position:fixed', 'right:16px', 'bottom:16px', 'z-index:9999',
+          'padding:12px 18px', 'border:none', 'border-radius:9999px',
+          'background:#0f172a', 'color:#fff', 'font-weight:600', 'font-size:15px',
+          'box-shadow:0 6px 20px rgba(0,0,0,.25)', 'cursor:pointer', 'display:none'
+        ].join(';');
+        document.body.appendChild(btn);
+
+        btn.addEventListener('click', async () => {
+          if (!promptInstalacao) return;
+          btn.disabled = true;
+          promptInstalacao.prompt();
+          try { await promptInstalacao.userChoice; } catch (_) {}
+          promptInstalacao = null;
+          btn.style.display = 'none';
+          btn.disabled = false;
+        });
+        return btn;
+      }
+
+      // Android/Chrome: dispara quando o app é instalável (HTTPS + manifest + SW).
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        promptInstalacao = e;
+        // Não mostra se já estiver rodando instalado (standalone).
+        const jaInstalado = window.matchMedia('(display-mode: standalone)').matches
+          || window.navigator.standalone === true;
+        if (!jaInstalado) criarBotaoInstalar().style.display = 'block';
+      });
+
+      window.addEventListener('appinstalled', () => {
+        promptInstalacao = null;
+        const btn = document.getElementById('btn-instalar-pwa');
+        if (btn) btn.style.display = 'none';
+      });
+    })();
   </script>
 
   <script>
